@@ -1,0 +1,17 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "failOnWarnings": false,
+  "pythonVersion": "3.11",
+  "reportUnusedClass": "error",
+  "reportUnusedFunction": "error",
+  "reportUnusedImport": "error",
+  "reportUnusedVariable": "error",
+  "include": ["app", "main.py"],
+  "exclude": [
+    ".venv",
+    "**/.venv",
+    "**/__pycache__",
+    "app/agents/main.py"
+  ]
+}

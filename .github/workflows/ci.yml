@@ -1,0 +1,232 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_llm_evals:
+        description: Run LLM-based evals
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: "0 3 * * *"
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-check-frontend:
+    name: Frontend Lint, Typecheck, Build, Format, Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+        run: npm run build
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Tests
+        run: npm run test
+
+  quality-check-python:
+    name: Lint, Type Check, and Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv + Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: BasedPyright type check
+        run: uv run basedpyright --level error .
+
+      - name: Pytest run tests
+        run: |
+          if [ -d tests ]; then
+            uv run pytest -q
+          else
+            echo "No tests directory found. Skipping pytest."
+          fi
+
+      - name: Compile smoke check
+        run: uv run python -m compileall app
+
+  quality-check-evals:
+    name: Evals Contract Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv + Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Run evals contract tests
+        run: uv run pytest -q evals/rag/generation/test_generation_dataset_contract_v2.py
+
+  llm-evals:
+    name: LLM Evals (RAG Generation)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_llm_evals == true)
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv + Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Ensure OPENAI_API_KEY is available
+        run: |
+          if [ -z "${OPENAI_API_KEY}" ]; then
+            echo "OPENAI_API_KEY is not set. Skipping LLM evals."
+            exit 0
+          fi
+
+      - name: Run LLM eval tests
+        run: |
+          uv run pytest -q \
+            evals/rag/generation/test_generation_faitfulness_deepeval.py \
+            evals/rag/generation/test_generation_relevancy_deepeval.py \
+            evals/rag/generation/test_generation_correctness_custom_deepeval.py
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: [quality-check-python, quality-check-frontend, quality-check-evals]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build docker image
+        run: docker build -t primer-studio:ci .
+
+  deploy-cloud-run:
+    name: Build, Push, and Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: [quality-check-python, quality-check-frontend, quality-check-evals]
+    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      REPO: ${{ vars.GAR_REPOSITORY }}
+      API_SERVICE: ${{ vars.CLOUD_RUN_API_SERVICE }}
+      FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud (OIDC)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: Configure Docker auth for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Build and push API image
+        run: |
+          API_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/api:${GITHUB_SHA}"
+          docker build -t "${API_IMAGE}" .
+          docker push "${API_IMAGE}"
+          echo "API_IMAGE=${API_IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Build and push Frontend image
+        run: |
+          FRONTEND_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/frontend:${GITHUB_SHA}"
+          docker build \
+            -f app/frontend/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL="${{ vars.NEXT_PUBLIC_API_URL }}" \
+            --build-arg NEXT_PUBLIC_SITE_URL="${{ vars.NEXT_PUBLIC_SITE_URL }}" \
+            -t "${FRONTEND_IMAGE}" \
+            app/frontend
+          docker push "${FRONTEND_IMAGE}"
+          echo "FRONTEND_IMAGE=${FRONTEND_IMAGE}" >> "$GITHUB_ENV"
+
+      - name: Deploy API to Cloud Run
+        run: |
+          gcloud run deploy "${API_SERVICE}" \
+            --image "${API_IMAGE}" \
+            --region "${REGION}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "^|^ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }}|LANGFUSE_BASE_URL=https://cloud.langfuse.com" \
+            --set-secrets "QDRANT_URL=QDRANT_URL:latest,QDRANT_API_KEY=QDRANT_API_KEY:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,FINNHUB_API_KEY=FINNHUB_API_KEY:latest,LANGFUSE_PUBLIC_KEY=LANGFUSE_PUBLIC_KEY:latest,LANGFUSE_SECRET_KEY=LANGFUSE_SECRET_KEY:latest,RATE_LIMIT_COOKIE_SECRET=RATE_LIMIT_COOKIE_SECRET:latest"
+
+      - name: Deploy Frontend to Cloud Run
+        run: |
+          gcloud run deploy "${FRONTEND_SERVICE}" \
+            --image "${FRONTEND_IMAGE}" \
+            --region "${REGION}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "^|^NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}|NEXT_PUBLIC_SITE_URL=${{ vars.NEXT_PUBLIC_SITE_URL }}|RATE_LIMIT_ANON_DAILY=2" \
+            --set-secrets "ELEVENLABS_API_KEY=ELEVENLABS_API_KEY:latest,RATE_LIMIT_COOKIE_SECRET=RATE_LIMIT_COOKIE_SECRET:latest"

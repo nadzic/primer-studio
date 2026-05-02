@@ -1,0 +1,83 @@
+[project]
+name = "primer-studio"
+version = "0.1.0"
+description = "Primer Studio research and decisioning stack"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Environment / config
+    "python-dotenv",
+    "pydantic",
+    "pydantic-settings",
+    # LLM frameworks
+    "langchain",
+    "langgraph",
+    "langsmith",
+    "langchain-openai",
+    "langchain-anthropic",
+    # LlamaIndex ecosystem
+    "llama-index",
+    "llama-index-llms-openai",
+    "llama-index-embeddings-openai",
+    # RAG + retrieval
+    "faiss-cpu",
+    "chromadb",
+    "qdrant-client",
+    "tiktoken",
+    # Data stack
+    "pandas",
+    "numpy",
+    "yfinance",
+    "httpx",
+    "tenacity",
+    "playwright>=1.58.0",
+    "duckduckgo-search>=8.1.1",
+    "llama-index-readers-web>=0.6.0",
+    "llama-index-readers-file>=0.6.0",
+    "pypdf>=6.9.2",
+    "llama-index-vector-stores-qdrant>=0.10.0",
+    "fastapi>=0.135.2",
+    "uvicorn[standard]>=0.42.0",
+    "fastembed>=0.8.0",
+    "sentence-transformers>=5.3.0",
+    "langfuse>=4.0.1",
+    "pyjwt>=2.12.1",
+    "cryptography>=46.0.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+    "basedpyright",
+    "ipykernel",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--strict-markers --cov=app.main --cov=app.api.router --cov=app.api.routes.meta --cov=app.api.routes.analyze --cov-report=term-missing --cov-fail-under=85"
+markers = [
+    "unit: Fast isolated unit tests",
+    "integration: Tests across route/service boundaries with mocks",
+    "e2e: End-to-end API smoke tests through ASGI app",
+]
+
+[tool.basedpyright]
+exclude = [
+    "app/agents/main.py",
+]
+
+[dependency-groups]
+dev = [
+    "deepeval>=3.9.5",
+]
