@@ -41,7 +41,7 @@ export function Composer({
 }: ComposerProps) {
   return (
     <form onSubmit={onSubmit} className="relative w-full">
-      <div className="relative rounded-2xl border border-zinc-800 bg-zinc-950/80 px-5 py-3 shadow-[0_0_60px_rgba(22,78,163,0.12)] backdrop-blur-sm">
+      <div className="relative rounded-2xl border border-zinc-200 bg-white px-5 py-3 shadow-[0_20px_45px_rgba(15,23,42,0.08)]">
         <div className="relative">
           <div className="flex items-center gap-3">
             <div className="flex-1">
@@ -53,7 +53,7 @@ export function Composer({
                 onFocus={onInputFocus}
                 onBlur={onInputBlur}
                 placeholder={placeholder}
-                className="w-full bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 outline-none"
+                className="w-full bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 outline-none"
               />
             </div>
             {showDictation && (
@@ -76,8 +76,8 @@ export function Composer({
                 }
                 className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition disabled:cursor-not-allowed disabled:opacity-50 ${
                   isDictating
-                    ? "border-red-500/60 bg-red-500/20 text-red-100"
-                    : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:bg-zinc-800"
+                    ? "border-red-400 bg-red-100 text-red-700"
+                    : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"
                 }`}
               >
                 {isDictating ? (
@@ -99,7 +99,7 @@ export function Composer({
             <button
               type="submit"
               disabled={isLoading || input.trim().length === 0}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
               title="Send"
             >
               <svg
@@ -115,22 +115,22 @@ export function Composer({
           </div>
         </div>
         {dictationDisabledReason && (
-          <p className="mt-2 text-xs text-amber-300">{dictationDisabledReason}</p>
+          <p className="mt-2 text-xs text-amber-700">{dictationDisabledReason}</p>
         )}
         {showSuggestions && (
-          <div className="absolute top-full left-0 z-30 mt-2 w-full overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/98 shadow-xl">
+          <div className="absolute top-full left-0 z-30 mt-2 w-full overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl">
             {visibleSuggestions.map((prompt) => (
               <button
                 key={prompt}
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => onSuggestionSelect(prompt)}
-                className="flex w-full items-center gap-3 border-b border-zinc-900 px-4 py-2.5 text-left text-sm text-zinc-300 transition last:border-b-0 hover:bg-zinc-900/80 hover:text-zinc-100"
+                className="flex w-full items-center gap-3 border-b border-zinc-100 px-4 py-2.5 text-left text-sm text-zinc-600 transition last:border-b-0 hover:bg-zinc-50 hover:text-zinc-900"
               >
                 <svg
                   aria-hidden
                   viewBox="0 0 24 24"
-                  className="h-4 w-4 shrink-0 fill-none stroke-zinc-500"
+                  className="h-4 w-4 shrink-0 fill-none stroke-zinc-400"
                   strokeWidth="2"
                 >
                   <circle cx="11" cy="11" r="7" />

@@ -23,11 +23,11 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 html {
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .hide-scrollbar {

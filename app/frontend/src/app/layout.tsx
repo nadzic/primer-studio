@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Veritake",
-  description: "Market research and multi-agent signal intelligence workspace",
+  title: "Primer Research Prototype",
+  description: "Agentic equity-research workflow prototype",
 };
 
 export default function RootLayout({
@@ -24,7 +24,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full bg-zinc-950 text-zinc-100">
+      <body className="min-h-full bg-zinc-50 text-zinc-900">
         <main className="min-h-full">{children}</main>
       </body>
     </html>
