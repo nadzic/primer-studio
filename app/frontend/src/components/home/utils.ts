@@ -4,15 +4,15 @@ import { BriefPoint, ResearchResponse } from "@/components/home/types";
 function formatBriefPoint(point: BriefPoint): string {
   const kind = point.type === "fact" ? "FACT" : "INTERPRETATION";
   const strength = point.evidence_strength ?? "unknown";
-  const source = point.source_url ? ` (${point.source_url})` : "";
-  return `[${kind} | ${strength}] ${point.text}${source}`;
+  const source = point.source_url ? ` ([source](${point.source_url}))` : "";
+  return `**[${kind} | ${strength}]** ${point.text}${source}`;
 }
 
-function formatSection(title: string, items: BriefPoint[]): string[] {
+function formatSection(title: string, items: BriefPoint[], emptyMessage = "No items extracted."): string[] {
   if (items.length === 0) {
-    return [title, "..."];
+    return [`### ${title}`, `- ${emptyMessage}`];
   }
-  return [title, ...items.map((item) => `- ${formatBriefPoint(item)}`)];
+  return [`### ${title}`, ...items.map((item) => `- ${formatBriefPoint(item)}`)];
 }
 
 function formatSource(source: Record<string, unknown>, index: number): string {
@@ -26,7 +26,14 @@ function formatSource(source: Record<string, unknown>, index: number): string {
     typeof source.final_source_score === "number" && Number.isFinite(source.final_source_score)
       ? source.final_source_score.toFixed(2)
       : "n/a";
-  return `${index + 1}. ${title} - ${sourceType} - score ${score}`;
+  const sourceUrl =
+    typeof source.url === "string" && source.url.trim()
+      ? source.url.trim()
+      : typeof source.source_url === "string" && source.source_url.trim()
+        ? source.source_url.trim()
+        : null;
+  const titleText = sourceUrl ? `[${index + 1}. ${title}](${sourceUrl})` : `${index + 1}. ${title}`;
+  return `- ${titleText} - ${sourceType} - score ${score}`;
 }
 
 export function formatResearchReply(payload: ResearchResponse): string {
@@ -47,11 +54,10 @@ export function formatResearchReply(payload: ResearchResponse): string {
     : [];
 
   const lines = [
-    `${company} (${ticker})`,
-    "Latest reporting research brief",
-    "----------------------------------------",
+    `# **${company} (${ticker})**`,
+    "## Latest reporting research brief",
     "",
-    ...formatSection("Executive summary", executive_points),
+    ...formatSection("Executive summary", executive_points, "No executive summary returned."),
     "",
     ...formatSection("What changed", brief.what_changed),
     "",
@@ -59,27 +65,33 @@ export function formatResearchReply(payload: ResearchResponse): string {
     "",
     ...formatSection("Bull points", brief.bull_points),
     "",
-    ...formatSection("Bear points", brief.bear_points),
+    ...formatSection(
+      "Bear points",
+      brief.bear_points,
+      "Model did not identify clear bear points from the selected evidence in this run.",
+    ),
     "",
     ...formatSection("What to watch next", brief.what_to_watch_next),
     "",
-    "Evidence quality",
-    `Strong: ${quality.strong} | Medium: ${quality.medium} | Weak: ${quality.weak}`,
+    "### Evidence quality",
+    `- **Strong:** ${quality.strong}`,
+    `- **Medium:** ${quality.medium}`,
+    `- **Weak:** ${quality.weak}`,
     "",
-    "Sources used",
+    "### Sources used",
     ...(sources.length > 0
       ? sources.map((source, index) => formatSource(source, index))
       : ["- No sources"]),
     "",
-    "Disclaimer",
-    payload.disclaimer || "This is not investment advice.",
+    "### Disclaimer",
+    `- ${payload.disclaimer || "This is not investment advice."}`,
   ];
 
   if (payload.warning) {
-    lines.push("", `Warning: ${payload.warning}`);
+    lines.push("", "### Warning", `- ${payload.warning}`);
   }
   if (payload.error) {
-    lines.push("", `Error: ${payload.error}`);
+    lines.push("", "### Error", `- ${payload.error}`);
   }
 
   return lines.join("\n");

@@ -56,6 +56,7 @@ describe("home utils", () => {
           title: "Official earnings release",
           source_type: "earnings_release",
           final_source_score: 0.95,
+          url: "https://example.com/source",
         },
       ],
       selected_evidence: [],
@@ -65,13 +66,14 @@ describe("home utils", () => {
       error: null,
     } satisfies ResearchResponse);
 
-    expect(reply).toContain("NVIDIA Corporation (NVDA)");
-    expect(reply).toContain("Latest reporting research brief");
-    expect(reply).toContain("Executive summary");
-    expect(reply).toContain("[FACT | strong] Revenue up YoY");
-    expect(reply).toContain("Evidence quality");
-    expect(reply).toContain("Strong: 4 | Medium: 3 | Weak: 1");
-    expect(reply).toContain("Disclaimer");
+    expect(reply).toContain("# **NVIDIA Corporation (NVDA)**");
+    expect(reply).toContain("## Latest reporting research brief");
+    expect(reply).toContain("### Executive summary");
+    expect(reply).toContain("- **[FACT | strong]** Revenue up YoY ([source](https://example.com/earnings))");
+    expect(reply).toContain("### Evidence quality");
+    expect(reply).toContain("- **Strong:** 4");
+    expect(reply).toContain("### Disclaimer");
+    expect(reply).toContain("- [1. Official earnings release](https://example.com/source)");
   });
 
   it("returns suggestions filtered by input and limited to max five", () => {
@@ -89,5 +91,32 @@ describe("home utils", () => {
 
     expect(getAnalyzeErrorMessage(new Error("boom"), 30_000)).toBe("boom");
     expect(getAnalyzeErrorMessage("bad", 30_000)).toBe("Unknown error");
+  });
+
+  it("uses explicit fallback when no bear points are returned", () => {
+    const reply = formatResearchReply({
+      company: "NVIDIA Corporation",
+      ticker: "NVDA",
+      brief: {
+        executive_summary: null,
+        what_changed: [],
+        what_matters_most_now: [],
+        bull_points: [],
+        bear_points: [],
+        what_to_watch_next: [],
+      },
+      evidence_quality_summary: { strong: 0, medium: 0, weak: 0 },
+      sources: [],
+      selected_evidence: [],
+      discarded_evidence_count: 0,
+      disclaimer: "This is not investment advice.",
+      warning: null,
+      error: null,
+    } satisfies ResearchResponse);
+
+    expect(reply).toContain("### Bear points");
+    expect(reply).toContain(
+      "Model did not identify clear bear points from the selected evidence in this run.",
+    );
   });
 });
