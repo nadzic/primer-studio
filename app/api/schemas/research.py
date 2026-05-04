@@ -19,6 +19,8 @@ class BriefPoint(BaseModel):
 
 class Brief(BaseModel):
     executive_summary: str | None = None
+    workflow_trace: list[str] = Field(default_factory=list)
+    evidence_strength_rubric: list[str] = Field(default_factory=list)
     what_changed: list[BriefPoint] = Field(default_factory=list)
     what_matters_most_now: list[BriefPoint] = Field(default_factory=list)
     bull_points: list[BriefPoint] = Field(default_factory=list)

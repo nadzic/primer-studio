@@ -144,6 +144,8 @@ async def research(payload: ResearchRequest) -> ResearchResponse:
 
     brief = Brief(
         executive_summary=cast(str | None, brief_data.get("executive_summary")) or summary,
+        workflow_trace=cast(list[str], brief_data.get("workflow_trace")) if isinstance(brief_data.get("workflow_trace"), list) else [],
+        evidence_strength_rubric=cast(list[str], brief_data.get("evidence_strength_rubric")) if isinstance(brief_data.get("evidence_strength_rubric"), list) else [],
         what_changed=_as_brief_points(brief_data.get("what_changed")),
         what_matters_most_now=_as_brief_points(brief_data.get("what_matters_most_now")),
         bull_points=_as_brief_points(brief_data.get("bull_points")),

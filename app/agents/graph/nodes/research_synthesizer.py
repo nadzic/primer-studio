@@ -8,6 +8,11 @@ from app.observability.tracing import observe
 
 _DISCLAIMER = "This is not investment advice."
 _MAX_SECTION_ITEMS = 5
+_EVIDENCE_STRENGTH_RUBRIC: list[str] = [
+    "strong = primarni/uradni vir (SEC filing, earnings release, company IR) + verifikabilna trditev (pogosto številke ali neposreden citat).",
+    "medium = kredibilen, a bolj interpretativen vir (npr. earnings call transcript, reputable financial news) ali kvantitativna trditev iz ne-uradnega vira.",
+    "weak = komentar/sentiment/špekulacija (analyst/blog/social). Uporabljeno le, če pomaga razumeti debato in je jasno označeno kot weak.",
+]
 
 
 def _evidence_id(ev: dict[str, Any]) -> str:
@@ -78,6 +83,7 @@ def _point_from_evidence(ev: dict[str, Any]) -> dict[str, Any] | None:
         "type": _normalize_point_type(ev.get("fact_or_interpretation")),
         "evidence_strength": _normalize_strength(ev.get("evidence_strength")),
         "source_url": source_url or None,
+        "source_type": str(ev.get("source_type") or "").strip() or None,
     }
     return point
 
@@ -207,9 +213,11 @@ def _render_point(point: dict[str, Any]) -> str:
     strength = _normalize_strength(point.get("evidence_strength")) or "unknown"
     evidence_id = str(point.get("evidence_id") or "").strip()
     source_url = str(point.get("source_url") or "").strip()
+    source_type = str(point.get("source_type") or "").strip().lower()
     evidence_label = f"[evidence:{evidence_id}] " if evidence_id else ""
+    source_type_label = f" [{source_type}]" if source_type else ""
     source_label = f" ({source_url})" if source_url else ""
-    return f"{evidence_label}[{point_type.upper()} | {strength}] {text}{source_label}"
+    return f"{evidence_label}[{point_type.upper()} | {strength}]{source_type_label} {text}{source_label}"
 
 
 def _render_section(title: str, points: list[dict[str, Any]]) -> str:
@@ -350,6 +358,13 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
         quality = _quality_counts(ranked)
         buckets = _bucket_selected(ranked)
         by_id, by_claim_source = _build_grounding_index(ranked)
+        workflow_trace: list[str] = [
+            f"Resolved entity: {company_name or 'Unknown'} ({symbol or 'N/A'})",
+            f"Searched public sources and ranked them by reliability/relevance/recency; kept top {len(state.get('ranked_sources') or []) if isinstance(state.get('ranked_sources'), list) else 'N/A'}.",
+            f"Extracted evidence items from ranked sources; classified strength (strong/medium/weak) and fact vs interpretation.",
+            "Selected evidence with strict grounding (each bullet maps to evidence_id + source_url) and coverage across sections.",
+            "Bear mode: ensured at least 2 risk/negative points are included when available from reliable sources.",
+        ]
 
         llm_warning: str | None = None
         llm_sections: dict[str, Any] = {}
@@ -424,12 +439,19 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
             what_changed = _points_from_evidences(ranked[:2])
         if not what_matters:
             what_matters = _points_from_evidences(ranked[2:4])
+        if not bear_points:
+            # Final guard: if LLM under-produces bear points, fallback to selected evidences tagged for bear_points.
+            bear_points = _points_from_evidences(buckets["bear_points"])
 
         disclaimer = str(llm_sections.get("disclaimer") or _DISCLAIMER).strip() or _DISCLAIMER
 
         lines: list[str] = [
             f"Company: {company_name or 'Unknown'}",
             f"Ticker: {symbol or 'N/A'}",
+            "",
+            _render_text_section("0) Workflow trace (agent steps)", workflow_trace),
+            "",
+            _render_text_section("0b) Evidence strength rubric", _EVIDENCE_STRENGTH_RUBRIC),
             "",
             _render_text_section("1) Executive summary", [executive_summary]),
             "",
@@ -459,6 +481,8 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
             "company": company_name or None,
             "ticker": symbol or None,
             "reporting_context": "Latest available reporting context from selected evidence.",
+            "workflow_trace": workflow_trace,
+            "evidence_strength_rubric": _EVIDENCE_STRENGTH_RUBRIC,
             "executive_summary": executive_summary,
             "what_changed": what_changed[:_MAX_SECTION_ITEMS],
             "what_matters_most_now": what_matters[:_MAX_SECTION_ITEMS],

@@ -66,6 +66,36 @@ _OFFICIAL_SUPPORT_SOURCE_TYPES: set[str] = {
     "public:company_ir",
 }
 
+_BEAR_MARKERS: tuple[str, ...] = (
+    "risk",
+    "headwind",
+    "pressure",
+    "decline",
+    "decreased",
+    "down",
+    "slowed",
+    "slowdown",
+    "weaker",
+    "miss",
+    "shortfall",
+    "competition",
+    "competitive",
+    "regulat",
+    "export",
+    "restriction",
+    "constraint",
+    "lawsuit",
+    "litigation",
+    "impairment",
+    "restructur",
+    "charge",
+    "inventory",
+    "write-down",
+    "writeoff",
+    "supply",
+    "concentration",
+)
+
 
 def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
     return any(marker in text for marker in markers)
@@ -113,6 +143,20 @@ def _infer_used_for(text: str) -> list[str]:
         if _contains_any(lower, markers):
             used_for.append(label)
     return used_for or ["what_matters_now"]
+
+
+def _as_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        out: list[str] = []
+        for item in value:
+            s = str(item).strip()
+            if s:
+                out.append(s)
+        return out
+    if value is None:
+        return []
+    s = str(value).strip()
+    return [s] if s else []
 
 
 def _should_exclude(ev: dict[str, Any], text: str) -> str | None:
@@ -207,6 +251,74 @@ def _inclusion_score(ev: dict[str, Any], reporting_relevance_score: float) -> fl
         + (0.20 * reporting_relevance_score)
     )
     return round(min(1.0, max(0.0, score)), 4)
+
+
+def _needs_bear_coverage(selected: list[dict[str, Any]]) -> bool:
+    bear_count = 0
+    for ev in selected:
+        used_for = _as_list(ev.get("used_for"))
+        if "bear_points" in used_for:
+            bear_count += 1
+    return bear_count < 2
+
+
+def _bear_mode_candidates(classified: list[object], already_selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected_keys: set[str] = set()
+    for ev in already_selected:
+        claim = _normalized_text(ev).lower()
+        source_url = str(ev.get("source_url") or ev.get("source") or "").strip().lower()
+        if claim and source_url:
+            selected_keys.add(f"{claim}||{source_url}")
+
+    candidates: list[dict[str, Any]] = []
+    for raw in classified:
+        if not isinstance(raw, dict):
+            continue
+        ev = dict(raw)
+        claim = _normalized_text(ev)
+        if not claim:
+            continue
+        source_url = str(ev.get("source_url") or ev.get("source") or "").strip()
+        key = f"{claim.lower()}||{source_url.lower()}"
+        if key in selected_keys:
+            continue
+
+        strength = str(ev.get("evidence_strength") or "").strip().lower()
+        if strength not in {"strong", "medium"}:
+            continue
+
+        source_type = str(ev.get("source_type") or "").strip().lower()
+        lower_claim = claim.lower()
+
+        # Bear mode focuses on negatives/risk from reliable sources.
+        has_bear_signal = _contains_any(lower_claim, _BEAR_MARKERS) or str(ev.get("category") or "").strip().lower() in {
+            "risk_disclosure",
+            "market_reaction",
+        }
+        if not has_bear_signal:
+            continue
+
+        official_like = source_type in _OFFICIAL_SUPPORT_SOURCE_TYPES or source_type in {
+            "earnings_call_transcript",
+            "reputable_financial_news",
+        }
+        if not official_like:
+            continue
+
+        # Conservative: treat these as bear_points only; keep provenance and labels.
+        ev["used_for"] = ["bear_points"]
+        ev["bear_mode"] = True
+        candidates.append(ev)
+
+    candidates = sorted(
+        candidates,
+        key=lambda item: (
+            float(item.get("confidence") or 0.0),
+            float(item.get("final_source_score") or 0.0),
+        ),
+        reverse=True,
+    )
+    return candidates
 
 
 def _llm_selection_decisions(classified: list[object]) -> dict[int, dict[str, Any]]:
@@ -428,6 +540,28 @@ def evidence_selector_node(state: Mapping[str, object]) -> dict[str, object | No
             ),
             reverse=True,
         )[:16]
+
+        # Bear mode: ensure at least a couple of well-grounded bear points make it through.
+        if _needs_bear_coverage(selected_sorted):
+            for candidate in _bear_mode_candidates(classified, already_selected=selected_sorted)[:3]:
+                candidate = dict(candidate)
+                candidate["include"] = True
+                candidate["inclusion_score"] = max(0.62, float(candidate.get("inclusion_score") or 0.62))
+                candidate["reason"] = (
+                    "Included (bear mode): ensures negative/risk coverage from reliable reporting."
+                )
+                selected_sorted.append(candidate)
+
+            # Re-sort and cap after injections.
+            selected_sorted = sorted(
+                selected_sorted,
+                key=lambda item: (
+                    float(item.get("inclusion_score") or 0.0),
+                    float(item.get("confidence") or 0.0),
+                ),
+                reverse=True,
+            )[:16]
+
         discarded_sorted = sorted(
             discarded,
             key=lambda item: float(item.get("inclusion_score") or 0.0),
