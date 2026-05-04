@@ -3,9 +3,9 @@ import { BriefPoint, ResearchResponse } from "@/components/home/types";
 
 function formatBriefPoint(point: BriefPoint): string {
   const kind = point.type === "fact" ? "FACT" : "INTERPRETATION";
-  const strength = point.evidence_strength ?? "unknown";
+  const strengthPart = point.evidence_strength ? ` | ${point.evidence_strength}` : "";
   const source = point.source_url ? ` ([source](${point.source_url}))` : "";
-  return `**[${kind} | ${strength}]** ${point.text}${source}`;
+  return `**[${kind}${strengthPart}]** ${point.text}${source}`;
 }
 
 function formatSection(title: string, items: BriefPoint[], emptyMessage = "No items extracted."): string[] {
