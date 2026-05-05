@@ -47,3 +47,22 @@ class ResearchResponse(BaseModel):
 
     warning: str | None = None
     error: str | None = None
+
+
+class ResearchFollowupRequest(BaseModel):
+    question: str = Field(..., min_length=1, description="User follow-up question about the report.")
+    company: str | None = None
+    ticker: str | None = None
+    brief: Brief = Field(..., description="Structured brief from the research run.")
+    selected_evidence: list[dict[str, Any]] = Field(
+        default_factory=list, description="Selected evidence payload for grounding."
+    )
+    chat_history: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Optional prior chat turns, each: {role: user|assistant, content: string}.",
+    )
+
+
+class ResearchFollowupResponse(BaseModel):
+    answer: str
+    disclaimer: str = "This is not investment advice."

@@ -4,6 +4,11 @@ export type ChatMessage = {
   content: string;
 };
 
+export type ResearchFollowupResponse = {
+  answer: string;
+  disclaimer: string;
+};
+
 export type Brief = {
   executive_summary: string | null;
   what_changed: BriefPoint[];

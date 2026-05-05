@@ -5,14 +5,17 @@ import { FormEvent, useMemo, useRef, useState } from "react";
 import { ANALYZE_TIMEOUT_MS } from "@/components/home/constants";
 import { AppHeader } from "@/components/home/app-header";
 import { Composer } from "@/components/home/composer";
-import { MessagesPane } from "@/components/home/messages-pane";
-import { ChatMessage, ResearchResponse } from "@/components/home/types";
+import { Launchpad } from "@/components/home/launchpad";
+import { ReportTab } from "@/components/home/report-tab";
+import { TabsBar } from "@/components/home/tabs-bar";
+import { ResearchResponse } from "@/components/home/types";
 import {
   formatResearchReply,
   getAnalyzeErrorMessage,
   getVisibleSuggestions,
 } from "@/components/home/utils";
-import { apiPost } from "@/lib/api/client";
+import { ResearchRun, WorkspaceTab } from "@/components/home/workspace-types";
+import { API_BASE_URL, apiPost } from "@/lib/api/client";
 
 type FeatureSection = {
   eyebrow: string;
@@ -119,81 +122,146 @@ function ProductPreview({ muted = false }: { muted?: boolean }) {
   );
 }
 
+function createRunId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `run-${crypto.randomUUID()}`;
+  }
+  return `run-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getReportTabTitle(response: ResearchResponse | undefined, query: string): string {
+  const ticker = response?.ticker?.trim();
+  const company = response?.company?.trim();
+  if (ticker) return `${ticker} Research`;
+  if (company) return `${company} Research`;
+  const fallback = query.trim().slice(0, 24);
+  return `${fallback || "Stock"} Research`;
+}
+
+async function assertBackendReachable(): Promise<void> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 5_000);
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      method: "GET",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`Health check returned ${response.status}`);
+    }
+  } catch (error) {
+    const reason =
+      error instanceof Error && error.message ? error.message : "unreachable backend";
+    throw new Error(
+      `Backend is not reachable at ${API_BASE_URL} (${reason}). Start the API server and retry.`,
+    );
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 export default function HomePage() {
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const hasMessages = messages.length > 0;
+  const [runs, setRuns] = useState<ResearchRun[]>([]);
+  const [tabs, setTabs] = useState<WorkspaceTab[]>([
+    { id: "tab-launchpad", kind: "launchpad", title: "Launchpad" },
+  ]);
+  const [activeTabId, setActiveTabId] = useState("tab-launchpad");
+
+  const hasWorkspace = runs.length > 0 || tabs.length > 1;
   const placeholder = useMemo(
-    () =>
-      hasMessages
-        ? "Ask follow-up about this research..."
-        : "Type: Research AAPL latest reporting changes",
-    [hasMessages],
+    () => (hasWorkspace ? "Research another company..." : "Type: Research AAPL latest reporting changes"),
+    [hasWorkspace],
   );
   const visibleSuggestions = useMemo(() => getVisibleSuggestions(input), [input]);
-  const showSuggestions =
-    !hasMessages && isInputFocused && !isLoading && visibleSuggestions.length > 0;
+  const showSuggestions = !hasWorkspace && isInputFocused && visibleSuggestions.length > 0;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const query = input.trim();
-    if (!query || isLoading) return;
+    if (!query) return;
 
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: query,
-    };
-    setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setIsLoading(true);
-
-    const assistantMessageId = `assistant-${Date.now()}`;
-    setMessages((prev) => [
+    setActiveTabId("tab-launchpad");
+    const runId = createRunId();
+    const createdAt = Date.now();
+    setRuns((prev) => [
       ...prev,
       {
-        id: assistantMessageId,
-        role: "assistant",
-        content: "Researching latest reporting...",
+        id: runId,
+        query,
+        createdAt,
+        status: "running",
+        followup: [],
       },
     ]);
 
     const abortController = new AbortController();
     const timeoutId = window.setTimeout(() => {
       abortController.abort();
+      setRuns((prev) =>
+        prev.map((run) =>
+          run.id === runId && run.status === "running"
+            ? {
+                ...run,
+                status: "failed",
+                finishedAt: Date.now(),
+                errorMessage: `Request timed out after ${Math.round(ANALYZE_TIMEOUT_MS / 1000)}s`,
+              }
+            : run,
+        ),
+      );
     }, ANALYZE_TIMEOUT_MS);
 
     try {
+      await assertBackendReachable();
       const response = await apiPost<ResearchResponse>(
         "/research",
         { query },
         { signal: abortController.signal },
       );
       const formatted = formatResearchReply(response);
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === assistantMessageId ? { ...message, content: formatted } : message,
+      setRuns((prev) =>
+        prev.map((run) =>
+          run.id === runId
+            ? {
+                ...run,
+                status: "completed",
+                finishedAt: Date.now(),
+                response,
+                formattedReport: formatted,
+              }
+            : run,
         ),
       );
+
+      const title = getReportTabTitle(response, query);
+      const reportTabId = `tab-report-${runId}`;
+      setTabs((prev) => {
+        const existing = prev.find((tab) => tab.kind === "report" && tab.runId === runId);
+        if (existing) return prev;
+        return [...prev, { id: reportTabId, kind: "report", title, runId }];
+      });
+      setActiveTabId(reportTabId);
     } catch (error) {
       const text = getAnalyzeErrorMessage(error, ANALYZE_TIMEOUT_MS);
-      setMessages((prev) =>
-        prev.map((message) =>
-          message.id === assistantMessageId
+      setRuns((prev) =>
+        prev.map((run) =>
+          run.id === runId
             ? {
-                ...message,
-                content: `I could not complete the research.\n\n${text}`,
+                ...run,
+                status: "failed",
+                finishedAt: Date.now(),
+                errorMessage: text,
               }
-            : message,
+            : run,
         ),
       );
     } finally {
       window.clearTimeout(timeoutId);
-      setIsLoading(false);
     }
   }
 
@@ -210,7 +278,7 @@ export default function HomePage() {
       isTranscribing={false}
       isDictationSupported={false}
       dictationDisabledReason={null}
-      isLoading={isLoading}
+      isLoading={false}
       onToggleDictation={() => undefined}
       showSuggestions={showSuggestions}
       visibleSuggestions={visibleSuggestions}
@@ -223,87 +291,146 @@ export default function HomePage() {
     />
   );
 
+  function closeTab(tabId: string) {
+    setTabs((prev) => prev.filter((tab) => tab.id !== tabId));
+    setActiveTabId((prevActive) => {
+      if (prevActive !== tabId) return prevActive;
+      return "tab-launchpad";
+    });
+  }
+
+  function openReportForRun(runId: string) {
+    const run = runs.find((item) => item.id === runId);
+    if (!run || run.status !== "completed") return;
+    const tabId = `tab-report-${runId}`;
+    setTabs((prev) => {
+      const existing = prev.find((tab) => tab.id === tabId);
+      if (existing) return prev;
+      const title = getReportTabTitle(run.response, run.query);
+      return [...prev, { id: tabId, kind: "report", title, runId }];
+    });
+    setActiveTabId(tabId);
+  }
+
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const activeRun =
+    activeTab.kind === "report" ? runs.find((run) => run.id === activeTab.runId) : undefined;
+
+  if (hasWorkspace) {
+    return (
+      <div className="h-screen overflow-hidden bg-zinc-50 text-zinc-900">
+        <AppHeader />
+        <div className="fixed inset-x-0 bottom-0 top-16">
+          <div className="mx-auto flex h-full w-full max-w-4xl flex-col px-6 md:px-8">
+            <div className="shrink-0 pt-4">
+              <TabsBar
+                tabs={tabs}
+                activeTabId={activeTabId}
+                onSelect={setActiveTabId}
+                onClose={closeTab}
+                onCreateNew={() => {
+                  setActiveTabId("tab-launchpad");
+                  inputRef.current?.focus();
+                }}
+              />
+            </div>
+
+            <div className="hide-scrollbar min-h-0 flex-1 overflow-y-auto pb-4">
+              {activeTab.kind === "launchpad" ? (
+                <Launchpad runs={runs} onOpenReport={openReportForRun} />
+              ) : (
+                <ReportTab
+                  runId={activeTab.runId}
+                  response={activeRun?.response}
+                  formattedReport={activeRun?.formattedReport}
+                  followup={activeRun?.followup ?? []}
+                  onAddFollowupMessage={(message) => {
+                    setRuns((prev) =>
+                      prev.map((run) =>
+                        run.id === activeTab.runId
+                          ? { ...run, followup: [...run.followup, message] }
+                          : run,
+                      ),
+                    );
+                  }}
+                />
+              )}
+            </div>
+
+            {activeTab.kind === "launchpad" && (
+              <div className="shrink-0 pb-4 pt-2">
+                <div className="rounded-2xl bg-zinc-50/95 p-1 backdrop-blur">
+                  <div>{composer}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
       <AppHeader />
-      <main className="mx-auto w-full max-w-6xl px-6 pb-20 pt-8 md:px-8">
-        {!hasMessages ? (
-          <>
-            <section className="mx-auto mb-20 max-w-4xl text-center">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">
-                Agentic Equity Research
-              </p>
-              <h1 className="text-5xl font-semibold tracking-tight text-zinc-900 md:text-7xl">
-                The AI equity analyst
-              </h1>
-              <p className="mx-auto mt-5 max-w-3xl text-lg leading-relaxed text-zinc-600">
-                Build a retail-investor workflow that finds what changed, ranks source quality, and
-                clearly separates evidence from interpretation.
-              </p>
-              <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-                <button
-                  type="button"
-                  className="rounded-full bg-emerald-300 px-6 py-3 text-sm font-semibold text-zinc-900"
-                >
-                  See features
-                </button>
-              </div>
-              <div className="mt-12">
-                <ProductPreview />
-              </div>
-            </section>
+      <main className="mx-auto w-full max-w-6xl px-6 pb-20 pt-24 md:px-8">
+        <section className="mx-auto mb-20 max-w-4xl text-center">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">
+            Agentic Equity Research
+          </p>
+          <h1 className="text-5xl font-semibold tracking-tight text-zinc-900 md:text-7xl">
+            The AI equity analyst
+          </h1>
+          <p className="mx-auto mt-5 max-w-3xl text-lg leading-relaxed text-zinc-600">
+            Build a retail-investor workflow that finds what changed, ranks source quality, and
+            clearly separates evidence from interpretation.
+          </p>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              className="rounded-full bg-emerald-300 px-6 py-3 text-sm font-semibold text-zinc-900"
+            >
+              See features
+            </button>
+          </div>
+          <div className="mt-12">
+            <ProductPreview />
+          </div>
+        </section>
 
-            <section className="mx-auto mb-20 w-full max-w-4xl rounded-3xl border border-zinc-200 bg-white p-6 shadow-[0_25px_60px_rgba(15,23,42,0.06)] md:p-8">
-              <h2 className="text-2xl font-semibold tracking-tight text-zinc-900">
-                Try the workflow
-              </h2>
-              <p className="mt-2 text-sm text-zinc-600">
-                Enter a company or ticker and get a structured brief: what changed, what matters,
-                bull vs bear points, and what to watch next.
-              </p>
-              <div className="mt-6">{composer}</div>
-            </section>
+        <section className="mx-auto mb-20 w-full max-w-4xl rounded-3xl border-2 border-emerald-300/80 bg-white p-6 shadow-[0_25px_60px_rgba(15,23,42,0.06)] md:p-8">
+          <h2 className="text-2xl font-semibold tracking-tight text-zinc-900">Try the workflow</h2>
+          <p className="mt-2 text-sm text-zinc-600">
+            Enter a company or ticker and get a structured brief: what changed, what matters, bull
+            vs bear points, and what to watch next.
+          </p>
+          <div className="mt-6">{composer}</div>
+        </section>
 
-            <section className="space-y-16">
-              {FEATURE_SECTIONS.map((section) => (
-                <article
-                  key={section.title}
-                  className="grid items-center gap-10 rounded-3xl border border-zinc-200 bg-zinc-50/80 p-6 md:grid-cols-2 md:p-8"
-                >
-                  <div className={section.reverse ? "md:order-2" : undefined}>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
-                      {section.eyebrow}
-                    </p>
-                    <h3 className="mt-3 text-4xl font-semibold tracking-tight text-zinc-900 md:text-5xl">
-                      {section.title}
-                    </h3>
-                    <p className="mt-5 max-w-lg text-lg leading-relaxed text-zinc-600">
-                      {section.description}
-                    </p>
-                    <FeatureChips chips={section.chips} />
-                  </div>
-                  <div className={section.reverse ? "md:order-1" : undefined}>
-                    <ProductPreview muted />
-                  </div>
-                </article>
-              ))}
-            </section>
-          </>
-        ) : (
-          <section className="mx-auto flex min-h-[calc(100vh-150px)] w-full max-w-4xl flex-col">
-            <div className="mb-4 rounded-2xl border border-zinc-200 bg-white px-4 py-3">
-              <p className="text-sm text-zinc-600">
-                Structured output for the technical task: facts first, interpretation second.
-              </p>
-            </div>
-            <section className="hide-scrollbar min-h-0 flex-1 overflow-y-auto rounded-2xl border border-zinc-200 bg-zinc-100/60 p-4">
-              <MessagesPane messages={messages} isLoading={isLoading} />
-            </section>
-            <section className="sticky bottom-4 mt-4 rounded-2xl bg-zinc-50/95 p-1 backdrop-blur">
-              <div>{composer}</div>
-            </section>
-          </section>
-        )}
+        <section className="space-y-16">
+          {FEATURE_SECTIONS.map((section) => (
+            <article
+              key={section.title}
+              className="grid items-center gap-10 rounded-3xl border border-zinc-200 bg-zinc-50/80 p-6 md:grid-cols-2 md:p-8"
+            >
+              <div className={section.reverse ? "md:order-2" : undefined}>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">
+                  {section.eyebrow}
+                </p>
+                <h3 className="mt-3 text-4xl font-semibold tracking-tight text-zinc-900 md:text-5xl">
+                  {section.title}
+                </h3>
+                <p className="mt-5 max-w-lg text-lg leading-relaxed text-zinc-600">
+                  {section.description}
+                </p>
+                <FeatureChips chips={section.chips} />
+              </div>
+              <div className={section.reverse ? "md:order-1" : undefined}>
+                <ProductPreview muted />
+              </div>
+            </article>
+          ))}
+        </section>
       </main>
     </div>
   );

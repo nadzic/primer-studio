@@ -12,9 +12,12 @@ from app.api.schemas.research import (
     Brief,
     BriefPoint,
     EvidenceQualitySummary,
+    ResearchFollowupRequest,
+    ResearchFollowupResponse,
     ResearchRequest,
     ResearchResponse,
 )
+from app.agents.services.prompt_llm_service import invoke_prompt_json
 
 router = APIRouter()
 RESEARCH_TIMEOUT_SECONDS = 180
@@ -167,3 +170,43 @@ async def research(payload: ResearchRequest) -> ResearchResponse:
         error=cast(str | None, result.get("error")),
     )
     return response
+
+
+@router.post("/research/followup", response_model=ResearchFollowupResponse)
+async def research_followup(payload: ResearchFollowupRequest) -> ResearchFollowupResponse:
+    """
+    Answer a follow-up question grounded on a previously generated research brief.
+    """
+    try:
+        company = (payload.company or "").strip() or None
+        ticker = (payload.ticker or "").strip().upper() or None
+
+        brief = payload.brief.model_dump()
+        selected_evidence = payload.selected_evidence[:40]
+        history = payload.chat_history[-12:]
+
+        result = await asyncio.to_thread(
+            invoke_prompt_json,
+            prompt_filename="research_followup.md",
+            payload={
+                "company": company,
+                "ticker": ticker,
+                "brief": brief,
+                "selected_evidence": selected_evidence,
+                "chat_history": history,
+                "question": payload.question,
+            },
+            output_schema_hint='{"answer":"string"}',
+        )
+        answer = (
+            str(result.get("answer") or "").strip()
+            if isinstance(result, dict)
+            else ""
+        )
+        if not answer:
+            answer = "I couldn't generate a grounded answer from the provided brief and evidence."
+        return ResearchFollowupResponse(answer=answer)
+    except TimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Follow-up failed: {e}") from e

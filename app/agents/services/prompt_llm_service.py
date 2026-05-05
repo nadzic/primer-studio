@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -77,6 +79,22 @@ def invoke_prompt_json(
         f"Expected output shape:\n{output_schema_hint}"
     )
 
-    response = llm.invoke([("system", system_prompt), ("human", user_prompt)])
+    timeout_s_raw = os.getenv("LLM_STEP_TIMEOUT_S", "25").strip()
+    try:
+        timeout_s = float(timeout_s_raw)
+    except Exception:
+        timeout_s = 25.0
+
+    def _invoke():
+        return llm.invoke([("system", system_prompt), ("human", user_prompt)])
+
+    # LangChain chat models do not guarantee a hard request timeout across providers.
+    # Enforce a strict wall-clock timeout so slow LLM steps fall back to heuristics.
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_invoke)
+        try:
+            response = future.result(timeout=timeout_s)
+        except FuturesTimeoutError as exc:
+            raise TimeoutError(f"LLM step timed out after {timeout_s}s ({prompt_filename}).") from exc
     text = _message_content_to_text(getattr(response, "content", response))
     return _extract_json_payload(text)

@@ -205,6 +205,18 @@ def _sorted_by_inclusion(selected: list[dict[str, Any]]) -> list[dict[str, Any]]
     )
 
 
+def _fallback_points(
+    *,
+    primary: list[dict[str, Any]],
+    ranked: list[dict[str, Any]],
+    ranked_slice: slice,
+) -> list[dict[str, Any]]:
+    if primary:
+        return primary
+    points = _points_from_evidences(ranked[ranked_slice])
+    return points
+
+
 def _render_point(point: dict[str, Any]) -> str:
     text = str(point.get("text") or "").strip()
     if not text:
@@ -439,9 +451,19 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
             what_changed = _points_from_evidences(ranked[:2])
         if not what_matters:
             what_matters = _points_from_evidences(ranked[2:4])
+        if not bull_points:
+            # Final guard: if LLM under-produces bull points, fallback to top selected evidences.
+            bull_points = _fallback_points(primary=_points_from_evidences(buckets["bull_points"]), ranked=ranked, ranked_slice=slice(0, 3))
         if not bear_points:
-            # Final guard: if LLM under-produces bear points, fallback to selected evidences tagged for bear_points.
-            bear_points = _points_from_evidences(buckets["bear_points"])
+            # Final guard: if LLM under-produces bear points, fallback to selected evidences (tagged when available).
+            bear_points = _fallback_points(primary=_points_from_evidences(buckets["bear_points"]), ranked=ranked, ranked_slice=slice(3, 6))
+        if not watch_next:
+            # Final guard: what-to-watch-next should never be empty; use mid-ranked evidence as a proxy.
+            watch_next = _fallback_points(
+                primary=_points_from_evidences(buckets["what_to_watch_next"]),
+                ranked=ranked,
+                ranked_slice=slice(1, 4),
+            )
 
         disclaimer = str(llm_sections.get("disclaimer") or _DISCLAIMER).strip() or _DISCLAIMER
 

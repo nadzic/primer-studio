@@ -76,6 +76,47 @@ flowchart TD
     I --> J([Response])
 ```
 
+## Technical task write-up (Primer take-home)
+
+### Workflow
+
+The workflow is intentionally multi-step (agentic), not a one-shot prompt:
+- **Resolve company**: normalize user intent to a specific company/ticker.
+- **Plan search**: generate purpose-driven queries for “latest reporting”.
+- **Search public sources**: retrieve public URLs/snippets with policy filters.
+- **Rank sources**: score reliability/relevance/recency and dedupe before downstream use.
+- **Extract evidence**: convert source text into atomic evidence items with URLs.
+- **Classify evidence**: label strength (strong/medium/weak) and fact vs interpretation.
+- **Select evidence**: keep only high-utility, grounded items for the retail brief.
+- **Synthesize brief**: produce a concise structured output with citations (no stock calls).
+
+### How sources are prioritised
+
+Sources are ranked by a combined score with explicit heuristics + model judgment:
+- **Reliability**: SEC filings and company IR materials are prioritised over commentary.
+- **Relevance**: preference for content tied to the latest reporting period and KPIs.
+- **Recency**: preference for the latest quarter/earnings cycle vs stale coverage.
+- **Dedupe + adjustments**: repeated newswire/duplicates are downweighted.
+
+This is designed to prevent “more text” from winning over “better evidence”.
+
+### Weak vs strong evidence handling
+
+The system separates **facts** from **interpretation** in the output and treats evidence as:
+- **Strong**: primary sources (SEC/IR) and high-confidence factual claims with clear grounding.
+- **Medium**: reputable secondary sources or weaker grounding (still useful context).
+- **Weak**: speculative commentary/sentiment; included only when clearly labeled and relevant to the debate.
+
+Only selected evidence is allowed to drive the final brief, and each bullet is mapped back to a source URL when available.
+
+### What I would improve with more time
+
+- **Deeper primary-source fetching**: ingest full 10-Q/8-K/earnings transcript text for better grounding.
+- **Streaming + trace UI**: stream per-node progress/events to the frontend instead of time-based progress.
+- **Evals**: expand evals to include ranking/selection metrics (e.g. “top sources contain SEC/IR/transcript”).
+- **Caching**: cache source discovery + fetch results to reduce latency and token spend.
+- **More robust extraction**: stronger HTML→text extraction and citation spans (paragraph-level citations).
+
 ## API Surface
 
 - `GET /api/v1/health`

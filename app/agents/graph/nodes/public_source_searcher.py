@@ -122,7 +122,9 @@ def public_source_searcher_node(state: Mapping[str, object]) -> dict[str, object
     - sources: list[dict] raw chunk-like objects (rank, text, source_id/url, score, ...)
     """
     try:
-        query_inputs = _iter_query_inputs(state)[:5]
+        # Keep source discovery fast and predictable. This node runs before ranking/extraction
+        # and can dominate end-to-end latency if it fans out too aggressively.
+        query_inputs = _iter_query_inputs(state)[:3]
         symbol = str(state.get("symbol") or "").strip().upper() or None
 
         all_chunks: list[dict[str, Any]] = []
@@ -141,7 +143,7 @@ def public_source_searcher_node(state: Mapping[str, object]) -> dict[str, object
 
         for q, purpose in query_inputs:
             try:
-                results = search_public_web(q, max_results=8, search_depth="advanced")
+                results = search_public_web(q, max_results=6, search_depth="basic", timeout_s=10.0)
                 for r in results:
                     if not _is_allowed_public_source(r.url, r.title, r.snippet):
                         filtered_out_count += 1
