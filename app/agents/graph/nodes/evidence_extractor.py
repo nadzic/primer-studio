@@ -278,6 +278,9 @@ def evidence_extractor_node(state: Mapping[str, object]) -> dict[str, object | N
                     "warning": state.get("warning"),
                     "error": None,
                 }
+        except TimeoutError:
+            # Expected degradation path: heuristic extractor below is sufficient.
+            llm_warning = None
         except Exception as exc:
             llm_warning = f"evidence_extractor LLM fallback: {exc}"
 

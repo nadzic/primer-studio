@@ -31,6 +31,12 @@ export type EvidenceQualitySummary = {
   weak: number;
 };
 
+export type TokenUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+};
+
 export type ResearchResponse = {
   company: string | null;
   ticker: string | null;
@@ -40,6 +46,7 @@ export type ResearchResponse = {
   selected_evidence: Array<Record<string, unknown>>;
   discarded_evidence_count: number;
   disclaimer: string;
+  usage?: TokenUsage | null;
   warning: string | null;
   error: string | null;
 };

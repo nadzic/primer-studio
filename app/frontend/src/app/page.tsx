@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { ANALYZE_TIMEOUT_MS } from "@/components/home/constants";
 import { AppHeader } from "@/components/home/app-header";
@@ -8,6 +8,7 @@ import { Composer } from "@/components/home/composer";
 import { Launchpad } from "@/components/home/launchpad";
 import { ReportTab } from "@/components/home/report-tab";
 import { TabsBar } from "@/components/home/tabs-bar";
+import { DEFAULT_MODEL_OPTION_ID, getModelOption } from "@/components/home/model-options";
 import { ResearchResponse } from "@/components/home/types";
 import {
   formatResearchReply,
@@ -27,26 +28,26 @@ type FeatureSection = {
 
 const FEATURE_SECTIONS: FeatureSection[] = [
   {
-    eyebrow: "Living model",
-    title: "Research that compounds.",
+    eyebrow: "Magnificent 7 focus",
+    title: "A focused research workspace.",
     description:
-      "Every assumption, note, and piece of reasoning is saved. Your research workflow improves every quarter instead of restarting from scratch.",
-    chips: ["Your Methodology", "Context Preserved", "No More Rebuilds", "Improves Over Time"],
+      "This prototype is tuned for the Magnificent 7. Each run keeps the report, sources, and follow-ups together so you can iterate without losing context.",
+    chips: ["Magnificent 7 Only", "Runs + Tabs", "Context Preserved", "Fast Iteration"],
   },
   {
-    eyebrow: "Scalability",
-    title: "Depth that scales.",
+    eyebrow: "Grounded output",
+    title: "Evidence first, interpretation second.",
     description:
-      "Run retrieval, ranking, and synthesis in one flow. The output stays concise, but the supporting evidence expands with each cycle.",
-    chips: ["Analyst-Level Depth", "Accurate Retrieval", "Broadens Coverage", "Scalable Process"],
+      "The brief is built from ranked public sources. Every bullet is labeled as fact vs interpretation and tied back to a source link for quick verification.",
+    chips: ["Ranked Sources", "Fact vs Interpretation", "Source Links", "Quality Signals"],
     reverse: true,
   },
   {
-    eyebrow: "Always-on research",
-    title: "Reports, delivered.",
+    eyebrow: "Workflow visibility",
+    title: "See what the agents did.",
     description:
-      "Upload coverage and receive preview notes ahead of earnings. Briefings are assembled automatically and easy to scan.",
-    chips: ["Earnings Previews", "Read-Across", "Earnings Briefings", "Auto-delivered"],
+      "Each report includes a step-by-step trace (search → ranking → extraction → synthesis) so you can understand the path to the output, not just the answer.",
+    chips: ["Workflow Trace", "Source Notes", "Repeatable Process", "Clear Sections"],
   },
 ];
 
@@ -165,11 +166,26 @@ export default function HomePage() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const [modelOptionId, setModelOptionId] = useState(DEFAULT_MODEL_OPTION_ID);
+
   const [runs, setRuns] = useState<ResearchRun[]>([]);
   const [tabs, setTabs] = useState<WorkspaceTab[]>([
     { id: "tab-launchpad", kind: "launchpad", title: "Launchpad" },
   ]);
   const [activeTabId, setActiveTabId] = useState("tab-launchpad");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("primer:modelOptionId");
+    if (stored && getModelOption(stored)) {
+      setModelOptionId(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("primer:modelOptionId", modelOptionId);
+  }, [modelOptionId]);
 
   const hasWorkspace = runs.length > 0 || tabs.length > 1;
   const placeholder = useMemo(
@@ -218,9 +234,14 @@ export default function HomePage() {
 
     try {
       await assertBackendReachable();
+      const selectedModel = getModelOption(modelOptionId);
       const response = await apiPost<ResearchResponse>(
         "/research",
-        { query },
+        {
+          query,
+          model: selectedModel?.model ?? null,
+          provider: selectedModel?.provider ?? null,
+        },
         { signal: abortController.signal },
       );
       const formatted = formatResearchReply(response);
@@ -274,6 +295,8 @@ export default function HomePage() {
       onInputChange={setInput}
       onInputFocus={() => setIsInputFocused(true)}
       onInputBlur={() => setIsInputFocused(false)}
+      modelOptionId={modelOptionId}
+      onModelOptionChange={setModelOptionId}
       isDictating={false}
       isTranscribing={false}
       isDictationSupported={false}
@@ -344,6 +367,8 @@ export default function HomePage() {
                   response={activeRun?.response}
                   formattedReport={activeRun?.formattedReport}
                   followup={activeRun?.followup ?? []}
+                  modelOptionId={modelOptionId}
+                  onModelOptionChange={setModelOptionId}
                   onAddFollowupMessage={(message) => {
                     setRuns((prev) =>
                       prev.map((run) =>

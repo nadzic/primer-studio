@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { Composer } from "../components/home/composer";
+import { DEFAULT_MODEL_OPTION_ID } from "../components/home/model-options";
 
 function renderComposer(overrides: Partial<ComponentProps<typeof Composer>> = {}) {
   const props: ComponentProps<typeof Composer> = {
@@ -15,6 +16,8 @@ function renderComposer(overrides: Partial<ComponentProps<typeof Composer>> = {}
     onInputChange: vi.fn(),
     onInputFocus: vi.fn(),
     onInputBlur: vi.fn(),
+    modelOptionId: DEFAULT_MODEL_OPTION_ID,
+    onModelOptionChange: vi.fn(),
     isDictating: false,
     isTranscribing: false,
     isDictationSupported: true,

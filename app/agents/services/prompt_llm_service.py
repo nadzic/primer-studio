@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from app.agents.services.llm_service import get_llm
+from app.agents.services.llm_service import add_llm_usage, get_llm
 
 _PROMPTS_DIR = Path(__file__).resolve().parents[1] / "graph" / "prompts"
 
@@ -96,5 +96,17 @@ def invoke_prompt_json(
             response = future.result(timeout=timeout_s)
         except FuturesTimeoutError as exc:
             raise TimeoutError(f"LLM step timed out after {timeout_s}s ({prompt_filename}).") from exc
+    # Best-effort token accounting (works when provider returns usage metadata).
+    usage = None
+    try:
+        if hasattr(response, "usage_metadata") and isinstance(getattr(response, "usage_metadata"), dict):
+            usage = getattr(response, "usage_metadata")
+        elif hasattr(response, "response_metadata") and isinstance(getattr(response, "response_metadata"), dict):
+            meta = getattr(response, "response_metadata")
+            usage = meta.get("token_usage") or meta.get("usage") or meta.get("usage_metadata")
+    except Exception:
+        usage = None
+    add_llm_usage(usage if isinstance(usage, dict) else None)
+
     text = _message_content_to_text(getattr(response, "content", response))
     return _extract_json_payload(text)

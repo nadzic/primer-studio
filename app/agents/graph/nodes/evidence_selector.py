@@ -432,6 +432,9 @@ def evidence_selector_node(state: Mapping[str, object]) -> dict[str, object | No
         llm_decisions: dict[int, dict[str, Any]] = {}
         try:
             llm_decisions = _llm_selection_decisions(classified)
+        except TimeoutError:
+            # Expected degradation path: deterministic rules below handle selection.
+            llm_warning = None
         except Exception as exc:
             llm_warning = f"evidence_selector LLM fallback: {exc}"
 

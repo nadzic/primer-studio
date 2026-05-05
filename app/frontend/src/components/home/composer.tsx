@@ -1,5 +1,7 @@
 import { FormEvent, RefObject } from "react";
 
+import { ModelSelector } from "@/components/home/model-selector";
+
 type ComposerProps = {
   input: string;
   placeholder: string;
@@ -8,6 +10,8 @@ type ComposerProps = {
   onInputChange: (value: string) => void;
   onInputFocus: () => void;
   onInputBlur: () => void;
+  modelOptionId: string;
+  onModelOptionChange: (next: string) => void;
   isDictating: boolean;
   isTranscribing: boolean;
   isDictationSupported: boolean;
@@ -28,6 +32,8 @@ export function Composer({
   onInputChange,
   onInputFocus,
   onInputBlur,
+  modelOptionId,
+  onModelOptionChange,
   isDictating,
   isTranscribing,
   isDictationSupported,
@@ -54,6 +60,13 @@ export function Composer({
                 onBlur={onInputBlur}
                 placeholder={placeholder}
                 className="w-full bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 outline-none"
+              />
+            </div>
+            <div className="hidden sm:block">
+              <ModelSelector
+                value={modelOptionId}
+                onChange={onModelOptionChange}
+                disabled={isLoading || isTranscribing}
               />
             </div>
             {showDictation && (
@@ -113,6 +126,14 @@ export function Composer({
               </svg>
             </button>
           </div>
+        </div>
+        <div className="mt-3 sm:hidden">
+          <ModelSelector
+            value={modelOptionId}
+            onChange={onModelOptionChange}
+            disabled={isLoading || isTranscribing}
+            className="block"
+          />
         </div>
         {dictationDisabledReason && (
           <p className="mt-2 text-xs text-amber-700">{dictationDisabledReason}</p>

@@ -7,6 +7,13 @@ from pydantic import BaseModel, Field
 
 class ResearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="User research query (e.g. NVDA)")
+    model: str | None = Field(
+        default=None,
+        description="Optional LLM model override for this request (e.g. gpt-4o-mini, gpt-5.5, claude-4.6-sonnet).",
+    )
+    provider: Literal["openai", "anthropic"] | None = Field(
+        default=None, description="Optional LLM provider override for this request."
+    )
 
 
 class BriefPoint(BaseModel):
@@ -34,6 +41,12 @@ class EvidenceQualitySummary(BaseModel):
     weak: int = 0
 
 
+class TokenUsage(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
 class ResearchResponse(BaseModel):
     company: str | None = None
     ticker: str | None = None
@@ -45,6 +58,7 @@ class ResearchResponse(BaseModel):
     discarded_evidence_count: int = 0
     disclaimer: str = "This is not investment advice."
 
+    usage: TokenUsage | None = None
     warning: str | None = None
     error: str | None = None
 
@@ -60,6 +74,10 @@ class ResearchFollowupRequest(BaseModel):
     chat_history: list[dict[str, str]] = Field(
         default_factory=list,
         description="Optional prior chat turns, each: {role: user|assistant, content: string}.",
+    )
+    model: str | None = Field(default=None, description="Optional LLM model override for this follow-up.")
+    provider: Literal["openai", "anthropic"] | None = Field(
+        default=None, description="Optional LLM provider override for this follow-up."
     )
 
 

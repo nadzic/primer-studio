@@ -2,6 +2,8 @@
 
 import { FormEvent, useMemo, useRef, useState } from "react";
 
+import { ModelSelector } from "@/components/home/model-selector";
+import { getModelOption } from "@/components/home/model-options";
 import { MessagesPane } from "@/components/home/messages-pane";
 import { FollowupMessage } from "@/components/home/workspace-types";
 import { ChatMessage, ResearchFollowupResponse, ResearchResponse } from "@/components/home/types";
@@ -12,6 +14,8 @@ type ReportTabProps = {
   response?: ResearchResponse;
   formattedReport?: string;
   followup: FollowupMessage[];
+  modelOptionId: string;
+  onModelOptionChange: (next: string) => void;
   onAddFollowupMessage: (message: FollowupMessage) => void;
 };
 
@@ -20,6 +24,8 @@ export function ReportTab({
   response,
   formattedReport,
   followup,
+  modelOptionId,
+  onModelOptionChange,
   onAddFollowupMessage,
 }: ReportTabProps) {
   const [input, setInput] = useState("");
@@ -66,6 +72,7 @@ export function ReportTab({
     onAddFollowupMessage(userMsg);
 
     try {
+      const selectedModel = getModelOption(modelOptionId);
       const payload = {
         question,
         company: response?.company ?? null,
@@ -73,6 +80,8 @@ export function ReportTab({
         brief: response?.brief,
         selected_evidence: response?.selected_evidence ?? [],
         chat_history: followupMessages.slice(-12).map((m) => ({ role: m.role, content: m.content })),
+        model: selectedModel?.model ?? null,
+        provider: selectedModel?.provider ?? null,
       };
 
       const result = await apiPost<ResearchFollowupResponse>("/research/followup", payload);
@@ -115,6 +124,9 @@ export function ReportTab({
                 className="w-full bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 outline-none"
               />
             </div>
+            <div className="hidden sm:block">
+              <ModelSelector value={modelOptionId} onChange={onModelOptionChange} disabled={isSending} />
+            </div>
             <button
               type="submit"
               disabled={isSending || input.trim().length === 0}
@@ -132,6 +144,9 @@ export function ReportTab({
               </svg>
             </button>
           </div>
+        </div>
+        <div className="mt-2 sm:hidden">
+          <ModelSelector value={modelOptionId} onChange={onModelOptionChange} disabled={isSending} className="block" />
         </div>
       </form>
     </section>

@@ -33,6 +33,13 @@ function formatTokens(tokens: number): string {
   return `${tokens} tokens`;
 }
 
+function extractUsageTokens(run: ResearchRun): number | null {
+  const usage = run.response?.usage as unknown;
+  if (!usage || typeof usage !== "object") return null;
+  const total = (usage as { total_tokens?: unknown }).total_tokens;
+  return typeof total === "number" && Number.isFinite(total) ? total : null;
+}
+
 function extractTopDomains(run: ResearchRun): string[] {
   const sources = run.response?.sources ?? [];
   const out: string[] = [];
@@ -53,6 +60,18 @@ function extractTopDomains(run: ResearchRun): string[] {
     }
   }
   return out;
+}
+
+function LoadingDots() {
+  const dot = "inline-block h-1 w-1 rounded-full bg-zinc-400";
+  const commonStyle = { animationDuration: "900ms" } as const;
+  return (
+    <span className="ml-2 inline-flex items-center gap-1 align-middle" aria-hidden>
+      <span className={`${dot} animate-pulse`} style={{ ...commonStyle, animationDelay: "0ms" }} />
+      <span className={`${dot} animate-pulse`} style={{ ...commonStyle, animationDelay: "150ms" }} />
+      <span className={`${dot} animate-pulse`} style={{ ...commonStyle, animationDelay: "300ms" }} />
+    </span>
+  );
 }
 
 type LaunchpadProps = {
@@ -79,12 +98,6 @@ export function Launchpad({ runs, onOpenReport }: LaunchpadProps) {
 
   return (
     <section className="mx-auto w-full max-w-4xl space-y-4">
-      <div className="rounded-2xl border border-zinc-200 bg-white px-4 py-3">
-        <p className="text-sm text-zinc-600">
-          Structured output for the technical task: facts first, interpretation second.
-        </p>
-      </div>
-
       {sorted.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center">
           <p className="text-sm text-zinc-600">
@@ -128,6 +141,7 @@ export function Launchpad({ runs, onOpenReport }: LaunchpadProps) {
                   ? Math.min(Math.floor(resolvedElapsedMs / 4_500), Math.max(stepsCount - 1, 0))
                   : Math.max(stepsCount - 1, 0);
                 const completedSteps = run.status === "completed" ? stepsCount : activeStepIndex + 1;
+                const usageTokens = run.status === "completed" ? extractUsageTokens(run) : null;
                 return (
                   <article
                     key={run.id}
@@ -192,7 +206,7 @@ export function Launchpad({ runs, onOpenReport }: LaunchpadProps) {
                           {formatElapsed(resolvedElapsedMs)}
                         </span>
                         <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-600">
-                          {formatTokens(estimatedTokens)}
+                          {formatTokens(usageTokens ?? estimatedTokens)}
                         </span>
                       </div>
 
@@ -216,6 +230,7 @@ export function Launchpad({ runs, onOpenReport }: LaunchpadProps) {
                                 </span>
                                 <span className={isActive ? "text-sm text-zinc-900" : "text-sm text-zinc-500"}>
                                   {step}
+                                  {isActive && <LoadingDots />}
                                 </span>
                               </div>
                             );

@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.agents.graph.state_models.nodes_research_state import NodesResearchState
 from app.agents.graph.workflow import build_graph
+from app.agents.services.llm_service import get_llm_usage, llm_request_overrides, llm_usage_tracker
 from app.api.schemas.research import (
     Brief,
     BriefPoint,
@@ -16,6 +17,7 @@ from app.api.schemas.research import (
     ResearchFollowupResponse,
     ResearchRequest,
     ResearchResponse,
+    TokenUsage,
 )
 from app.agents.services.prompt_llm_service import invoke_prompt_json
 
@@ -73,6 +75,18 @@ def _normalize_strength(value: Any) -> EvidenceStrength | None:
     return None
 
 
+def _infer_provider(provider: str | None, model: str | None) -> str | None:
+    if provider:
+        normalized = provider.strip().lower()
+        return normalized if normalized in {"openai", "anthropic"} else None
+    model_name = (model or "").strip().lower()
+    if model_name.startswith("claude"):
+        return "anthropic"
+    if model_name:
+        return "openai"
+    return None
+
+
 def _as_brief_points(value: Any) -> list[BriefPoint]:
     if not isinstance(value, list):
         return []
@@ -115,10 +129,12 @@ async def research(payload: ResearchRequest) -> ResearchResponse:
     }
 
     try:
-        result = await asyncio.wait_for(
-            run_in_threadpool(_GRAPH.invoke, state),
-            timeout=RESEARCH_TIMEOUT_SECONDS,
-        )
+        provider = _infer_provider(payload.provider, payload.model)
+        with llm_request_overrides(provider=provider, model_name=payload.model), llm_usage_tracker():
+            result = await asyncio.wait_for(
+                run_in_threadpool(_GRAPH.invoke, state),
+                timeout=RESEARCH_TIMEOUT_SECONDS,
+            )
     except TimeoutError as e:
         raise HTTPException(
             status_code=504,
@@ -166,6 +182,7 @@ async def research(payload: ResearchRequest) -> ResearchResponse:
         selected_evidence=selected_evidence,
         discarded_evidence_count=discarded_evidence_count,
         disclaimer=disclaimer or "This is not investment advice.",
+        usage=TokenUsage(**get_llm_usage()) if isinstance(get_llm_usage(), dict) else None,
         warning=cast(str | None, result.get("warning")),
         error=cast(str | None, result.get("error")),
     )
@@ -185,19 +202,21 @@ async def research_followup(payload: ResearchFollowupRequest) -> ResearchFollowu
         selected_evidence = payload.selected_evidence[:40]
         history = payload.chat_history[-12:]
 
-        result = await asyncio.to_thread(
-            invoke_prompt_json,
-            prompt_filename="research_followup.md",
-            payload={
-                "company": company,
-                "ticker": ticker,
-                "brief": brief,
-                "selected_evidence": selected_evidence,
-                "chat_history": history,
-                "question": payload.question,
-            },
-            output_schema_hint='{"answer":"string"}',
-        )
+        provider = _infer_provider(payload.provider, payload.model)
+        with llm_request_overrides(provider=provider, model_name=payload.model):
+            result = await asyncio.to_thread(
+                invoke_prompt_json,
+                prompt_filename="research_followup.md",
+                payload={
+                    "company": company,
+                    "ticker": ticker,
+                    "brief": brief,
+                    "selected_evidence": selected_evidence,
+                    "chat_history": history,
+                    "question": payload.question,
+                },
+                output_schema_hint='{"answer":"string"}',
+            )
         answer = (
             str(result.get("answer") or "").strip()
             if isinstance(result, dict)

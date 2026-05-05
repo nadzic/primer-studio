@@ -336,14 +336,17 @@ def _llm_rank_sources(
     sources: list[dict[str, Any]],
     fingerprint_counts: Mapping[str, int],
 ) -> list[dict[str, Any]]:
+    # Keep the LLM payload small and fast: we only ever return the top ~25 anyway,
+    # and passing large chunks increases latency + timeout risk.
+    sources_for_llm = sources[:25]
     payload_sources: list[dict[str, Any]] = []
-    for idx, source in enumerate(sources):
+    for idx, source in enumerate(sources_for_llm):
         payload_sources.append(
             {
                 "idx": idx,
                 "title": str(source.get("title") or "").strip(),
                 "url": str(source.get("url") or source.get("source_id") or "").strip(),
-                "text": str(source.get("text") or "").strip()[:900],
+                "text": str(source.get("text") or "").strip()[:450],
                 "source_type": str(source.get("source_type") or "").strip(),
                 "query_purpose": str(source.get("query_purpose") or "").strip(),
                 "search_score": _to_float(source.get("score")),
@@ -382,10 +385,11 @@ def _llm_rank_sources(
         if not isinstance(item, dict):
             continue
         idx = _to_int(item.get("idx"))
-        if idx is None or idx < 0 or idx >= len(sources) or idx in used_indices:
+        # idx refers to the LLM payload slice, not necessarily the full input list.
+        if idx is None or idx < 0 or idx >= len(sources_for_llm) or idx in used_indices:
             continue
         used_indices.add(idx)
-        base = dict(sources[idx])
+        base = dict(sources_for_llm[idx])
         source_type = str(item.get("source_type") or "").strip() or _normalized_source_type(base)
         reliability_score = _clamp01(_to_float(item.get("reliability_score")) or _reliability_score(source_type, str(base.get("text") or "").lower()))
         relevance_score = _clamp01(_to_float(item.get("relevance_score")) or _relevance_score(base, source_type))
@@ -475,6 +479,10 @@ def source_ranker_node(state: Mapping[str, object]) -> dict[str, object | None]:
                     "warning": state.get("warning"),
                     "error": None,
                 }
+        except TimeoutError:
+            # Expected degradation path: we already have a deterministic heuristic fallback below.
+            # Don't surface this as an end-user warning.
+            llm_warning = None
         except Exception as exc:
             llm_warning = f"source_ranker LLM fallback: {exc}"
 

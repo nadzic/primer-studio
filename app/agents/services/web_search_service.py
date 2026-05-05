@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -10,6 +11,8 @@ from dotenv import load_dotenv
 _ = load_dotenv()
 
 WebSearchProvider = Literal["tavily"]
+
+_CACHE: dict[str, tuple[float, list[WebSearchResult]]] = {}
 
 
 @dataclass(frozen=True)
@@ -55,11 +58,37 @@ def search_public_web(
     if not q:
         return []
 
+    # Stabilize repeated runs within a server session:
+    # - Deterministic mode: reuse the first observed result set for the same query params.
+    # - Default mode: reuse results within a short TTL to reduce jitter.
+    det = str(os.getenv("DETERMINISTIC_MODE", "0") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
+    ttl_s_raw = os.getenv("WEB_SEARCH_CACHE_TTL_S", "180").strip()
+    try:
+        ttl_s = float(ttl_s_raw)
+    except Exception:
+        ttl_s = 180.0
+
+    cache_key = f"{q.lower()}||{max_results}||{search_depth}"
+    cached = _CACHE.get(cache_key)
+    now = time.time()
+    if cached is not None:
+        ts, results = cached
+        if det or (ttl_s > 0 and (now - ts) <= ttl_s):
+            return list(results)
+
     provider = _normalized_provider()
     if provider == "tavily":
-        return _tavily_search(
+        results = _tavily_search(
             q, max_results=max_results, search_depth=search_depth, timeout_s=timeout_s
         )
+        _CACHE[cache_key] = (now, list(results))
+        return results
 
     return []
 

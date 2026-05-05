@@ -69,7 +69,7 @@ describe("home utils", () => {
     expect(reply).toContain("# **NVIDIA Corporation (NVDA)**");
     expect(reply).toContain("## Latest reporting research brief");
     expect(reply).toContain("### Executive summary");
-    expect(reply).toContain("- **[FACT | strong]** Revenue up YoY ([source](https://example.com/earnings))");
+    expect(reply).toContain("- Revenue up YoY ([source](https://example.com/earnings))");
     expect(reply).toContain("### Evidence quality");
     expect(reply).toContain("- **Strong:** 4");
     expect(reply).toContain("### Disclaimer");

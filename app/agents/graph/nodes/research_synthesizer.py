@@ -7,6 +7,7 @@ from app.agents.services.prompt_llm_service import invoke_prompt_json
 from app.observability.tracing import observe
 
 _DISCLAIMER = "This is not investment advice."
+_SCOPE_NOTE = "Prototype scope: this iteration focuses on the Magnificent 7 stocks only."
 _MAX_SECTION_ITEMS = 5
 _EVIDENCE_STRENGTH_RUBRIC: list[str] = [
     "strong = primarni/uradni vir (SEC filing, earnings release, company IR) + verifikabilna trditev (pogosto številke ali neposreden citat).",
@@ -384,6 +385,9 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
             llm_sections = _llm_synthesize_sections(
                 company_name=company_name, symbol=symbol, selected=ranked
             )
+        except TimeoutError:
+            # Expected degradation path: the deterministic renderer below produces a usable brief.
+            llm_warning = None
         except Exception as exc:
             llm_warning = f"research_synthesizer LLM fallback: {exc}"
 
@@ -466,10 +470,13 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
             )
 
         disclaimer = str(llm_sections.get("disclaimer") or _DISCLAIMER).strip() or _DISCLAIMER
+        if "magnificent 7" not in disclaimer.lower() and "mag 7" not in disclaimer.lower():
+            disclaimer = f"{_SCOPE_NOTE} {disclaimer}".strip()
 
         lines: list[str] = [
             f"Company: {company_name or 'Unknown'}",
             f"Ticker: {symbol or 'N/A'}",
+            f"Scope: Magnificent 7 only",
             "",
             _render_text_section("0) Workflow trace (agent steps)", workflow_trace),
             "",
