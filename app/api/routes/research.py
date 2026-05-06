@@ -128,13 +128,16 @@ async def research(payload: ResearchRequest) -> ResearchResponse:
         "error": None,
     }
 
+    usage_snapshot: dict[str, int] | None = None
     try:
         provider = _infer_provider(payload.provider, payload.model)
-        with llm_request_overrides(provider=provider, model_name=payload.model), llm_usage_tracker():
-            result = await asyncio.wait_for(
-                run_in_threadpool(_GRAPH.invoke, state),
-                timeout=RESEARCH_TIMEOUT_SECONDS,
-            )
+        with llm_request_overrides(provider=provider, model_name=payload.model):
+            with llm_usage_tracker():
+                result = await asyncio.wait_for(
+                    run_in_threadpool(_GRAPH.invoke, state),
+                    timeout=RESEARCH_TIMEOUT_SECONDS,
+                )
+                usage_snapshot = get_llm_usage()
     except TimeoutError as e:
         raise HTTPException(
             status_code=504,
@@ -182,7 +185,7 @@ async def research(payload: ResearchRequest) -> ResearchResponse:
         selected_evidence=selected_evidence,
         discarded_evidence_count=discarded_evidence_count,
         disclaimer=disclaimer or "This is not investment advice.",
-        usage=TokenUsage(**get_llm_usage()) if isinstance(get_llm_usage(), dict) else None,
+        usage=TokenUsage(**usage_snapshot) if isinstance(usage_snapshot, dict) else None,
         warning=cast(str | None, result.get("warning")),
         error=cast(str | None, result.get("error")),
     )

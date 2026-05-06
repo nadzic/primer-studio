@@ -11,6 +11,8 @@ class NodesResearchState(TypedDict, total=False):
     # Entity normalization
     company_name: str | None
     symbol: str | None
+    sector: str | None
+    industry: str | None
 
     # Retrieval planning + results
     search_queries: list[str]

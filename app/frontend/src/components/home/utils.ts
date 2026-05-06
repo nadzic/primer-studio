@@ -6,7 +6,11 @@ function formatBriefPoint(point: BriefPoint): string {
   return `${point.text}${source}`;
 }
 
-function formatSection(title: string, items: BriefPoint[], emptyMessage = "No items extracted."): string[] {
+function formatSection(
+  title: string,
+  items: BriefPoint[],
+  emptyMessage = "No distinct items were available for this section in this run.",
+): string[] {
   if (items.length === 0) {
     return [`### ${title}`, `- ${emptyMessage}`];
   }
@@ -59,17 +63,25 @@ export function formatResearchReply(payload: ResearchResponse): string {
     "",
     ...formatSection("What changed", brief.what_changed),
     "",
-    ...formatSection("What matters most now", brief.what_matters_most_now),
+    ...formatSection(
+      "What matters most now",
+      brief.what_matters_most_now,
+      "No clear priority drivers were extracted for this run; review margin/guidance evidence in Sources used.",
+    ),
     "",
     ...formatSection("Bull points", brief.bull_points),
     "",
     ...formatSection(
       "Bear points",
       brief.bear_points,
-      "Model did not identify clear bear points from the selected evidence in this run.",
+      "No clear downside risks surfaced from the selected evidence in this run.",
     ),
     "",
-    ...formatSection("What to watch next", brief.what_to_watch_next),
+    ...formatSection(
+      "What to watch next",
+      brief.what_to_watch_next,
+      "No explicit forward-looking checkpoints were extracted in this run; review guidance/outlook sources.",
+    ),
     "",
     "### Evidence quality",
     `- **Strong:** ${quality.strong}`,

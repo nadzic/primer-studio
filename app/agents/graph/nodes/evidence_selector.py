@@ -38,14 +38,71 @@ _NUMERIC_RE = re.compile(r"\d")
 _USED_FOR_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "what_changed",
-        ("yoy", "qoq", "increased", "decreased", "declined", "rose", "fell", "guidance"),
+        (
+            "yoy",
+            "qoq",
+            "increased",
+            "decreased",
+            "declined",
+            "rose",
+            "fell",
+            "reported",
+            "results",
+            "guidance",
+        ),
     ),
     (
         "what_matters_now",
-        ("demand", "margin", "guidance", "risk", "cash flow", "backlog", "headwind"),
+        (
+            "demand",
+            "margin",
+            "guidance",
+            "risk",
+            "cash flow",
+            "backlog",
+            "headwind",
+            "capex",
+            "inventory",
+        ),
     ),
-    ("bull_points", ("beat", "strong", "growth", "expansion", "improved", "accelerat")),
-    ("bear_points", ("miss", "weak", "decline", "pressure", "slowdown", "risk", "headwind")),
+    (
+        "bull_points",
+        (
+            "beat",
+            "strong",
+            "growth",
+            "grew",
+            "rose",
+            "higher",
+            "expansion",
+            "improved",
+            "accelerat",
+            "record",
+            "raised",
+            "demand",
+            "cash flow",
+        ),
+    ),
+    (
+        "bear_points",
+        (
+            "miss",
+            "weak",
+            "decline",
+            "declined",
+            "fell",
+            "lower",
+            "pressure",
+            "slowdown",
+            "slowed",
+            "risk",
+            "headwind",
+            "constraint",
+            "restriction",
+            "regulat",
+            "litigation",
+        ),
+    ),
     (
         "what_to_watch_next",
         ("next quarter", "outlook", "watch", "monitor", "going forward", "expects"),
@@ -65,6 +122,7 @@ _OFFICIAL_SUPPORT_SOURCE_TYPES: set[str] = {
     "public:sec_edgar",
     "public:company_ir",
 }
+_MAX_SELECTED_EVIDENCES = 24
 
 _BEAR_MARKERS: tuple[str, ...] = (
     "risk",
@@ -211,17 +269,26 @@ def _hard_guard_interpretation(
     if has_numeric or has_official_support:
         return (False, 0.0, None)
 
-    if strength == "weak" or source_type in {"analyst_or_commentary", "public:analyst_or_commentary"}:
+    if strength == "weak" or source_type in {
+        "analyst_or_commentary",
+        "public:analyst_or_commentary",
+    }:
         return (
             True,
             0.0,
-            "Hard guard: interpretation excluded (no numeric signal and no official source support).",
+            (
+                "Hard guard: interpretation excluded "
+                "(no numeric signal and no official source support)."
+            ),
         )
 
     return (
         False,
         0.18,
-        "Hard guard: interpretation down-ranked (missing numeric signal and official source support).",
+        (
+            "Hard guard: interpretation down-ranked "
+            "(missing numeric signal and official source support)."
+        ),
     )
 
 
@@ -262,7 +329,10 @@ def _needs_bear_coverage(selected: list[dict[str, Any]]) -> bool:
     return bear_count < 2
 
 
-def _bear_mode_candidates(classified: list[object], already_selected: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _bear_mode_candidates(
+    classified: list[object],
+    already_selected: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     selected_keys: set[str] = set()
     for ev in already_selected:
         claim = _normalized_text(ev).lower()
@@ -291,7 +361,8 @@ def _bear_mode_candidates(classified: list[object], already_selected: list[dict[
         lower_claim = claim.lower()
 
         # Bear mode focuses on negatives/risk from reliable sources.
-        has_bear_signal = _contains_any(lower_claim, _BEAR_MARKERS) or str(ev.get("category") or "").strip().lower() in {
+        category = str(ev.get("category") or "").strip().lower()
+        has_bear_signal = _contains_any(lower_claim, _BEAR_MARKERS) or category in {
             "risk_disclosure",
             "market_reaction",
         }
@@ -301,6 +372,8 @@ def _bear_mode_candidates(classified: list[object], already_selected: list[dict[
         official_like = source_type in _OFFICIAL_SUPPORT_SOURCE_TYPES or source_type in {
             "earnings_call_transcript",
             "reputable_financial_news",
+            "public:earnings_transcript",
+            "public:financial_news",
         }
         if not official_like:
             continue
@@ -542,14 +615,20 @@ def evidence_selector_node(state: Mapping[str, object]) -> dict[str, object | No
                 float(item.get("confidence") or 0.0),
             ),
             reverse=True,
-        )[:16]
+        )[:_MAX_SELECTED_EVIDENCES]
 
         # Bear mode: ensure at least a couple of well-grounded bear points make it through.
         if _needs_bear_coverage(selected_sorted):
-            for candidate in _bear_mode_candidates(classified, already_selected=selected_sorted)[:3]:
+            for candidate in _bear_mode_candidates(
+                classified,
+                already_selected=selected_sorted,
+            )[:3]:
                 candidate = dict(candidate)
                 candidate["include"] = True
-                candidate["inclusion_score"] = max(0.62, float(candidate.get("inclusion_score") or 0.62))
+                candidate["inclusion_score"] = max(
+                    0.62,
+                    float(candidate.get("inclusion_score") or 0.62),
+                )
                 candidate["reason"] = (
                     "Included (bear mode): ensures negative/risk coverage from reliable reporting."
                 )
@@ -563,7 +642,7 @@ def evidence_selector_node(state: Mapping[str, object]) -> dict[str, object | No
                     float(item.get("confidence") or 0.0),
                 ),
                 reverse=True,
-            )[:16]
+            )[:_MAX_SELECTED_EVIDENCES]
 
         discarded_sorted = sorted(
             discarded,

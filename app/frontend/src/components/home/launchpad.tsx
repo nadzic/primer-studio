@@ -36,8 +36,24 @@ function formatTokens(tokens: number): string {
 function extractUsageTokens(run: ResearchRun): number | null {
   const usage = run.response?.usage as unknown;
   if (!usage || typeof usage !== "object") return null;
-  const total = (usage as { total_tokens?: unknown }).total_tokens;
-  return typeof total === "number" && Number.isFinite(total) ? total : null;
+  const usageObj = usage as {
+    total_tokens?: unknown;
+    prompt_tokens?: unknown;
+    completion_tokens?: unknown;
+  };
+  const total = usageObj.total_tokens;
+  if (typeof total === "number" && Number.isFinite(total)) return total;
+  const prompt = usageObj.prompt_tokens;
+  const completion = usageObj.completion_tokens;
+  if (
+    typeof prompt === "number" &&
+    Number.isFinite(prompt) &&
+    typeof completion === "number" &&
+    Number.isFinite(completion)
+  ) {
+    return Math.max(0, Math.round(prompt + completion));
+  }
+  return null;
 }
 
 function extractTopDomains(run: ResearchRun): string[] {
@@ -132,11 +148,7 @@ export function Launchpad({ runs, onOpenReport }: LaunchpadProps) {
                     : run.finishedAt
                       ? run.finishedAt - run.createdAt
                       : 0;
-                const estimatedTokens = Math.round(
-                  isRunning && run.id === runningRunId
-                    ? Math.max(1200, (resolvedElapsedMs / 1000) * 550)
-                    : Math.max(1200, stepsCount * 1200),
-                );
+                const estimatedTokens = Math.round(Math.max(1200, (resolvedElapsedMs / 1000) * 550));
                 const activeStepIndex = isRunning
                   ? Math.min(Math.floor(resolvedElapsedMs / 4_500), Math.max(stepsCount - 1, 0))
                   : Math.max(stepsCount - 1, 0);

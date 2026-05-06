@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from app.agents.services.prompt_llm_service import invoke_prompt_json
@@ -9,11 +9,200 @@ from app.observability.tracing import observe
 _DISCLAIMER = "This is not investment advice."
 _SCOPE_NOTE = "Prototype scope: this iteration focuses on the Magnificent 7 stocks only."
 _MAX_SECTION_ITEMS = 5
+_TARGET_SECTION_ITEMS = 3
 _EVIDENCE_STRENGTH_RUBRIC: list[str] = [
-    "strong = primarni/uradni vir (SEC filing, earnings release, company IR) + verifikabilna trditev (pogosto številke ali neposreden citat).",
-    "medium = kredibilen, a bolj interpretativen vir (npr. earnings call transcript, reputable financial news) ali kvantitativna trditev iz ne-uradnega vira.",
-    "weak = komentar/sentiment/špekulacija (analyst/blog/social). Uporabljeno le, če pomaga razumeti debato in je jasno označeno kot weak.",
+    (
+        "strong = primary/official source (SEC filing, earnings release, company IR) + "
+        "verifiable statement (often numbers or direct quotation)."
+    ),
+    (
+        "medium = credible but more interpretative source "
+        "(e.g. earnings call transcript, reputable financial news) "
+        "or quantitative statement from a non-official source."
+    ),
+    (
+        "weak = comment/sentiment/speculation (analyst/blog/social). "
+    ),
 ]
+_CHANGED_MARKERS: tuple[str, ...] = (
+    "yoy",
+    "year over year",
+    "year-over-year",
+    "qoq",
+    "quarter over quarter",
+    "sequential",
+    "reported",
+    "results",
+    "revenue",
+    "eps",
+)
+_MATTERS_MARKERS: tuple[str, ...] = (
+    "margin",
+    "guidance",
+    "demand",
+    "headwind",
+    "risk",
+    "cash flow",
+    "backlog",
+    "capex",
+    "inventory",
+)
+_BULL_MARKERS: tuple[str, ...] = (
+    "backlog",
+    "beat",
+    "cash flow",
+    "cloud",
+    "demand",
+    "expansion",
+    "gain",
+    "grew",
+    "growth",
+    "higher",
+    "improv",
+    "increased",
+    "margin expansion",
+    "positive",
+    "raised",
+    "record",
+    "rose",
+    "solid",
+    "accelerat",
+    "strong",
+)
+_BEAR_MARKERS: tuple[str, ...] = (
+    "competition",
+    "competitive",
+    "concern",
+    "constraint",
+    "deceleration",
+    "declined",
+    "decline",
+    "decrease",
+    "down",
+    "drop",
+    "fell",
+    "headwind",
+    "litigation",
+    "lower",
+    "miss",
+    "pressure",
+    "regulat",
+    "restriction",
+    "risk",
+    "shortfall",
+    "slowed",
+    "slowdown",
+    "tariff",
+    "weak",
+    "weaker",
+)
+_WATCH_MARKERS: tuple[str, ...] = (
+    "guidance",
+    "outlook",
+    "next quarter",
+    "watch",
+    "monitor",
+    "forward",
+    "expects",
+)
+_SECTOR_MARKERS: dict[str, tuple[str, ...]] = {
+    "information technology": (
+        "cloud",
+        "ai",
+        "semiconductor",
+        "gpu",
+        "capex",
+        "pricing",
+        "inventory",
+        "utilization",
+    ),
+    "communication services": (
+        "ad spend",
+        "advertising",
+        "engagement",
+        "monetization",
+        "regulat",
+        "traffic acquisition",
+    ),
+    "consumer discretionary": (
+        "consumer demand",
+        "unit growth",
+        "average selling price",
+        "discount",
+        "auto",
+        "ev",
+        "delivery",
+    ),
+}
+_MAG7_TAIL_RISKS: dict[str, tuple[str, ...]] = {
+    "AAPL": (
+        "Scenario risk: iPhone replacement cycles or China demand could weaken, "
+        "pressuring revenue growth and hardware margins.",
+        "Scenario risk: regulatory or platform-fee pressure could reduce App Store economics.",
+    ),
+    "AMZN": (
+        "Scenario risk: retail margin gains could reverse if fulfillment costs, "
+        "wage pressure, or discounting rise.",
+        "Scenario risk: AWS growth could slow if cloud optimization or "
+        "AI infrastructure competition weighs on demand.",
+    ),
+    "GOOG": (
+        "Scenario risk: search and YouTube monetization could face pressure from "
+        "AI-driven changes in user behavior and ad budgets.",
+        "Scenario risk: antitrust remedies or privacy regulation could constrain "
+        "distribution, data use, or advertising economics.",
+    ),
+    "GOOGL": (
+        "Scenario risk: search and YouTube monetization could face pressure from "
+        "AI-driven changes in user behavior and ad budgets.",
+        "Scenario risk: antitrust remedies or privacy regulation could constrain "
+        "distribution, data use, or advertising economics.",
+    ),
+    "META": (
+        "Scenario risk: ad demand, engagement, or monetization could soften if "
+        "macro conditions or competition pressure advertiser spend.",
+        "Scenario risk: regulatory scrutiny around privacy, AI, or platform content "
+        "could raise costs or limit targeting efficiency.",
+    ),
+    "MSFT": (
+        "Scenario risk: Azure and AI infrastructure growth could disappoint if "
+        "enterprise demand slows or cloud optimization returns.",
+        "Scenario risk: AI capex could pressure free cash flow or margins if "
+        "monetization lags infrastructure spending.",
+    ),
+    "NVDA": (
+        "Scenario risk: data center GPU demand could normalize if hyperscaler "
+        "AI capex slows or customers digest prior purchases.",
+        "Scenario risk: export restrictions, supply constraints, or competitive "
+        "accelerators could pressure revenue growth and margins.",
+    ),
+    "TSLA": (
+        "Scenario risk: EV demand or pricing could weaken if competition, incentives, "
+        "or consumer affordability pressure deliveries.",
+        "Scenario risk: margin recovery could disappoint if price cuts, "
+        "factory utilization, or launch costs offset cost reductions.",
+    ),
+}
+_SECTOR_TAIL_RISKS: dict[str, tuple[str, ...]] = {
+    "information technology": (
+        "Scenario risk: technology demand could slow if enterprise budgets tighten "
+        "or customers delay upgrades.",
+        "Scenario risk: AI and cloud infrastructure spending could pressure margins "
+        "if monetization lags investment.",
+    ),
+    "communication services": (
+        "Scenario risk: advertising or engagement trends could weaken if macro "
+        "conditions or platform competition pressure user activity.",
+        "Scenario risk: regulatory scrutiny could raise compliance costs or "
+        "constrain data-driven monetization.",
+    ),
+    "consumer discretionary": (
+        "Scenario risk: consumer demand could soften if affordability, rates, "
+        "or competition pressure unit growth.",
+        "Scenario risk: margin recovery could disappoint if pricing, incentives, "
+        "or fulfillment costs move against the company.",
+    ),
+}
 
 
 def _evidence_id(ev: dict[str, Any]) -> str:
@@ -131,7 +320,9 @@ def _point_from_item(
         point = _point_from_evidence(grounded_ev)
         if point is None:
             return None
-        point["type"] = _normalize_point_type(item.get("type") or item.get("fact_or_interpretation"))
+        point["type"] = _normalize_point_type(
+            item.get("type") or item.get("fact_or_interpretation")
+        )
         strength = _normalize_strength(item.get("evidence_strength"))
         if strength is not None:
             point["evidence_strength"] = strength
@@ -206,16 +397,177 @@ def _sorted_by_inclusion(selected: list[dict[str, Any]]) -> list[dict[str, Any]]
     )
 
 
-def _fallback_points(
+def _contains_any(text: str, markers: tuple[str, ...]) -> bool:
+    return any(marker in text for marker in markers)
+
+
+def _matters_markers_for_context(sector: str, industry: str) -> tuple[str, ...]:
+    sector_key = sector.strip().lower()
+    industry_key = industry.strip().lower()
+    extra: list[str] = []
+    if sector_key in _SECTOR_MARKERS:
+        extra.extend(_SECTOR_MARKERS[sector_key])
+    for key, values in _SECTOR_MARKERS.items():
+        if key and key in industry_key:
+            extra.extend(values)
+    merged = [*_MATTERS_MARKERS, *extra]
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for marker in merged:
+        m = marker.strip().lower()
+        if not m or m in seen:
+            continue
+        seen.add(m)
+        deduped.append(m)
+    return tuple(deduped)
+
+
+def _point_key(point: dict[str, Any]) -> str:
+    evidence_id = str(point.get("evidence_id") or "").strip().lower()
+    if evidence_id:
+        return evidence_id
+    text = str(point.get("text") or "").strip().lower()
+    source = str(point.get("source_url") or "").strip().lower()
+    return f"{text}||{source}"
+
+
+def _is_bear_point(point: dict[str, Any]) -> bool:
+    text = str(point.get("text") or "").strip().lower()
+    return _contains_any(text, _BEAR_MARKERS)
+
+
+def _is_bull_point(point: dict[str, Any]) -> bool:
+    text = str(point.get("text") or "").strip().lower()
+    return _contains_any(text, _BULL_MARKERS) and not _is_bear_point(point)
+
+
+def _scenario_bear_points(
+    *,
+    symbol: str,
+    sector: str,
+    industry: str,
+) -> list[dict[str, Any]]:
+    templates = _MAG7_TAIL_RISKS.get(symbol.strip().upper())
+    if templates is None:
+        sector_key = sector.strip().lower()
+        templates = _SECTOR_TAIL_RISKS.get(sector_key)
+    if templates is None and industry:
+        industry_key = industry.strip().lower()
+        for sector_key, sector_templates in _SECTOR_TAIL_RISKS.items():
+            if sector_key in industry_key:
+                templates = sector_templates
+                break
+    if templates is None:
+        templates = (
+            "Scenario risk: demand, margins, or execution could deteriorate "
+            "relative to current investor expectations.",
+        )
+
+    return [
+        {
+            "text": text,
+            "type": "interpretation",
+            "evidence_strength": "weak",
+            "evidence_id": None,
+            "source_url": None,
+            "source_type": "scenario_risk",
+        }
+        for text in templates
+    ]
+
+
+def _section_candidates(
     *,
     primary: list[dict[str, Any]],
-    ranked: list[dict[str, Any]],
-    ranked_slice: slice,
+    ranked_points: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    if primary:
-        return primary
-    points = _points_from_evidences(ranked[ranked_slice])
-    return points
+    return _dedupe_points([*primary, *ranked_points])
+
+
+def _pick_section_points(
+    *,
+    primary: list[dict[str, Any]],
+    ranked_points: list[dict[str, Any]],
+    seen: set[str],
+    want: int,
+    markers: tuple[str, ...] | None = None,
+    predicate: Callable[[dict[str, Any]], bool] | None = None,
+    allow_fallback: bool = True,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    candidates = _section_candidates(primary=primary, ranked_points=ranked_points)
+
+    def _accept(point: dict[str, Any], *, require_markers: bool) -> bool:
+        key = _point_key(point)
+        if not key or key in seen:
+            return False
+        if predicate is not None and not predicate(point):
+            return False
+        if require_markers and markers is not None:
+            text = str(point.get("text") or "").strip().lower()
+            if not _contains_any(text, markers):
+                return False
+        return True
+
+    if markers is not None:
+        for point in candidates:
+            if not _accept(point, require_markers=True):
+                continue
+            out.append(point)
+            seen.add(_point_key(point))
+            if len(out) >= want:
+                return out
+
+    if not allow_fallback:
+        return out
+
+    for point in candidates:
+        if not _accept(point, require_markers=False):
+            continue
+        out.append(point)
+        seen.add(_point_key(point))
+        if len(out) >= want:
+            break
+    return out
+
+
+def _pick_reuse_points(
+    *,
+    primary: list[dict[str, Any]],
+    ranked_points: list[dict[str, Any]],
+    avoid: set[str],
+    want: int,
+    markers: tuple[str, ...] | None = None,
+    predicate: Callable[[dict[str, Any]], bool] | None = None,
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    local_seen: set[str] = set()
+    candidates = _section_candidates(primary=primary, ranked_points=ranked_points)
+
+    def _maybe_append(point: dict[str, Any], *, avoid_keys: bool, require_markers: bool) -> bool:
+        key = _point_key(point)
+        if not key or key in local_seen:
+            return False
+        if avoid_keys and key in avoid:
+            return False
+        if predicate is not None and not predicate(point):
+            return False
+        if require_markers and markers is not None:
+            text = str(point.get("text") or "").strip().lower()
+            if not _contains_any(text, markers):
+                return False
+        local_seen.add(key)
+        out.append(point)
+        return len(out) >= want
+
+    for avoid_keys in (True, False):
+        for require_markers in (True, False):
+            if markers is None and require_markers:
+                continue
+            for point in candidates:
+                if _maybe_append(point, avoid_keys=avoid_keys, require_markers=require_markers):
+                    return out
+    return out
 
 
 def _render_point(point: dict[str, Any]) -> str:
@@ -230,7 +582,10 @@ def _render_point(point: dict[str, Any]) -> str:
     evidence_label = f"[evidence:{evidence_id}] " if evidence_id else ""
     source_type_label = f" [{source_type}]" if source_type else ""
     source_label = f" ({source_url})" if source_url else ""
-    return f"{evidence_label}[{point_type.upper()} | {strength}]{source_type_label} {text}{source_label}"
+    return (
+        f"{evidence_label}[{point_type.upper()} | {strength}]"
+        f"{source_type_label} {text}{source_label}"
+    )
 
 
 def _render_section(title: str, points: list[dict[str, Any]]) -> str:
@@ -261,10 +616,12 @@ def _format_citations(evidences: list[dict[str, Any]]) -> list[str]:
 def _llm_synthesize_sections(
     company_name: str,
     symbol: str,
+    sector: str,
+    industry: str,
     selected: list[dict[str, Any]],
 ) -> dict[str, Any]:
     payload_evidences: list[dict[str, Any]] = []
-    for ev in selected[:16]:
+    for ev in selected[:24]:
         payload_evidences.append(
             {
                 "evidence_id": _evidence_id(ev),
@@ -283,6 +640,8 @@ def _llm_synthesize_sections(
         payload={
             "company_name": company_name,
             "symbol": symbol,
+            "sector": sector or None,
+            "industry": industry or None,
             "selected_evidences": payload_evidences,
         },
         output_schema_hint="""
@@ -353,6 +712,8 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
     try:
         company_name = str(state.get("company_name") or "").strip()
         symbol = str(state.get("symbol") or "").strip().upper()
+        sector = str(state.get("sector") or "").strip()
+        industry = str(state.get("industry") or "").strip()
 
         selected = state.get("selected_evidences")
         if not isinstance(selected, list):
@@ -371,19 +732,43 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
         quality = _quality_counts(ranked)
         buckets = _bucket_selected(ranked)
         by_id, by_claim_source = _build_grounding_index(ranked)
+        ranked_sources_raw = state.get("ranked_sources")
+        ranked_sources_kept: int | str = (
+            len(ranked_sources_raw) if isinstance(ranked_sources_raw, list) else "N/A"
+        )
         workflow_trace: list[str] = [
             f"Resolved entity: {company_name or 'Unknown'} ({symbol or 'N/A'})",
-            f"Searched public sources and ranked them by reliability/relevance/recency; kept top {len(state.get('ranked_sources') or []) if isinstance(state.get('ranked_sources'), list) else 'N/A'}.",
-            f"Extracted evidence items from ranked sources; classified strength (strong/medium/weak) and fact vs interpretation.",
-            "Selected evidence with strict grounding (each bullet maps to evidence_id + source_url) and coverage across sections.",
-            "Bear mode: ensured at least 2 risk/negative points are included when available from reliable sources.",
+            (
+                "Searched public sources and ranked them by "
+                f"reliability/relevance/recency; kept top {ranked_sources_kept}."
+            ),
+            (
+                "Extracted evidence items from ranked sources; "
+                "classified strength (strong/medium/weak) and fact vs interpretation."
+            ),
+            (
+                "Selected evidence with strict grounding "
+                "(evidence-based bullets map to evidence_id + source_url) "
+                "and coverage across sections."
+            ),
+            (
+                "Bear mode: ensured at least 2 risk/negative points are included "
+                "when available from reliable sources."
+            ),
         ]
+        if sector or industry:
+            context_label = " / ".join(part for part in [sector, industry] if part)
+            workflow_trace.append(f"Sector context applied: {context_label}.")
 
         llm_warning: str | None = None
         llm_sections: dict[str, Any] = {}
         try:
             llm_sections = _llm_synthesize_sections(
-                company_name=company_name, symbol=symbol, selected=ranked
+                company_name=company_name,
+                symbol=symbol,
+                sector=sector,
+                industry=industry,
+                selected=ranked,
             )
         except TimeoutError:
             # Expected degradation path: the deterministic renderer below produces a usable brief.
@@ -451,22 +836,112 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
             executive_summary = (
                 f"Selected evidence for {company_name or symbol or 'the query'} was limited."
             )
-        if not what_changed:
-            what_changed = _points_from_evidences(ranked[:2])
-        if not what_matters:
-            what_matters = _points_from_evidences(ranked[2:4])
+
+        ranked_points = _points_from_evidences(ranked)
+        what_changed_primary = _dedupe_points(
+            [*what_changed, *_points_from_evidences(buckets["what_changed"])]
+        )
+        what_matters_primary = _dedupe_points(
+            [*what_matters, *_points_from_evidences(buckets["what_matters_now"])]
+        )
+        bull_primary = _dedupe_points(
+            [*bull_points, *_points_from_evidences(buckets["bull_points"])]
+        )
+        bear_primary = _dedupe_points(
+            [*bear_points, *_points_from_evidences(buckets["bear_points"])]
+        )
+        watch_primary = _dedupe_points(
+            [*watch_next, *_points_from_evidences(buckets["what_to_watch_next"])]
+        )
+
+        seen_keys: set[str] = set()
+        matters_markers = _matters_markers_for_context(sector=sector, industry=industry)
+        what_changed = _pick_section_points(
+            primary=what_changed_primary,
+            ranked_points=ranked_points,
+            seen=seen_keys,
+            want=_TARGET_SECTION_ITEMS,
+            markers=_CHANGED_MARKERS,
+            allow_fallback=False,
+        )
+        what_matters = _pick_section_points(
+            primary=what_matters_primary,
+            ranked_points=ranked_points,
+            seen=seen_keys,
+            want=_TARGET_SECTION_ITEMS,
+            markers=matters_markers,
+            allow_fallback=True,
+        )
+        bull_points = _pick_section_points(
+            primary=bull_primary,
+            ranked_points=ranked_points,
+            seen=seen_keys,
+            want=_TARGET_SECTION_ITEMS,
+            markers=_BULL_MARKERS,
+            predicate=_is_bull_point,
+            allow_fallback=True,
+        )
+        # Bear points should stay genuinely risk-oriented.
+        bear_points = _pick_section_points(
+            primary=bear_primary,
+            ranked_points=ranked_points,
+            seen=seen_keys,
+            want=_TARGET_SECTION_ITEMS,
+            markers=_BEAR_MARKERS,
+            predicate=_is_bear_point,
+            allow_fallback=True,
+        )
+        watch_next = _pick_section_points(
+            primary=watch_primary,
+            ranked_points=ranked_points,
+            seen=seen_keys,
+            want=_TARGET_SECTION_ITEMS,
+            markers=_WATCH_MARKERS,
+            allow_fallback=True,
+        )
         if not bull_points:
-            # Final guard: if LLM under-produces bull points, fallback to top selected evidences.
-            bull_points = _fallback_points(primary=_points_from_evidences(buckets["bull_points"]), ranked=ranked, ranked_slice=slice(0, 3))
+            bull_points = _pick_reuse_points(
+                primary=bull_primary,
+                ranked_points=ranked_points,
+                avoid={
+                    _point_key(point)
+                    for section in (what_changed, what_matters, bear_points, watch_next)
+                    for point in section
+                },
+                want=2,
+                markers=_BULL_MARKERS,
+                predicate=_is_bull_point,
+            )
         if not bear_points:
-            # Final guard: if LLM under-produces bear points, fallback to selected evidences (tagged when available).
-            bear_points = _fallback_points(primary=_points_from_evidences(buckets["bear_points"]), ranked=ranked, ranked_slice=slice(3, 6))
+            bear_points = _pick_reuse_points(
+                primary=bear_primary,
+                ranked_points=ranked_points,
+                avoid={
+                    _point_key(point)
+                    for section in (what_changed, what_matters, bull_points, watch_next)
+                    for point in section
+                },
+                want=2,
+                markers=_BEAR_MARKERS,
+                predicate=_is_bear_point,
+            )
+        if not bear_points:
+            bear_points = _scenario_bear_points(
+                symbol=symbol,
+                sector=sector,
+                industry=industry,
+            )
         if not watch_next:
-            # Final guard: what-to-watch-next should never be empty; use mid-ranked evidence as a proxy.
-            watch_next = _fallback_points(
-                primary=_points_from_evidences(buckets["what_to_watch_next"]),
-                ranked=ranked,
-                ranked_slice=slice(1, 4),
+            watch_next = _pick_reuse_points(
+                primary=watch_primary,
+                ranked_points=ranked_points,
+                avoid={
+                    _point_key(point)
+                    for section in (what_changed, what_matters, bull_points, bear_points)
+                    for point in section
+                },
+                want=2,
+                markers=_WATCH_MARKERS,
             )
 
         disclaimer = str(llm_sections.get("disclaimer") or _DISCLAIMER).strip() or _DISCLAIMER
@@ -476,7 +951,7 @@ def research_synthesizer_node(state: Mapping[str, object]) -> dict[str, object |
         lines: list[str] = [
             f"Company: {company_name or 'Unknown'}",
             f"Ticker: {symbol or 'N/A'}",
-            f"Scope: Magnificent 7 only",
+            "Scope: Magnificent 7 only",
             "",
             _render_text_section("0) Workflow trace (agent steps)", workflow_trace),
             "",

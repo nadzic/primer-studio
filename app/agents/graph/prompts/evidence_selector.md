@@ -9,6 +9,8 @@ Include evidence that:
   - bull points
   - bear points
   - what to watch next
+- is diverse enough to cover upside, downside, and forward-looking checkpoints
+- does not duplicate the same claim wording across multiple sections
 
 Weak evidence may be included only if clearly labelled and useful for understanding market debate.
 

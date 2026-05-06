@@ -8,14 +8,54 @@ from app.observability.tracing import observe
 _TICKER_RE = re.compile(r"\b[A-Z]{1,6}\b")
 
 _MAG7: dict[str, dict[str, str]] = {
-    "AAPL": {"company_name": "Apple Inc.", "exchange": "NASDAQ"},
-    "AMZN": {"company_name": "Amazon.com, Inc.", "exchange": "NASDAQ"},
-    "GOOG": {"company_name": "Alphabet Inc.", "exchange": "NASDAQ"},
-    "GOOGL": {"company_name": "Alphabet Inc.", "exchange": "NASDAQ"},
-    "META": {"company_name": "Meta Platforms, Inc.", "exchange": "NASDAQ"},
-    "MSFT": {"company_name": "Microsoft Corporation", "exchange": "NASDAQ"},
-    "NVDA": {"company_name": "NVIDIA Corporation", "exchange": "NASDAQ"},
-    "TSLA": {"company_name": "Tesla, Inc.", "exchange": "NASDAQ"},
+    "AAPL": {
+        "company_name": "Apple Inc.",
+        "exchange": "NASDAQ",
+        "sector": "Information Technology",
+        "industry": "Consumer Electronics",
+    },
+    "AMZN": {
+        "company_name": "Amazon.com, Inc.",
+        "exchange": "NASDAQ",
+        "sector": "Consumer Discretionary",
+        "industry": "Internet Retail and Cloud Infrastructure",
+    },
+    "GOOG": {
+        "company_name": "Alphabet Inc.",
+        "exchange": "NASDAQ",
+        "sector": "Communication Services",
+        "industry": "Internet Content and Digital Advertising",
+    },
+    "GOOGL": {
+        "company_name": "Alphabet Inc.",
+        "exchange": "NASDAQ",
+        "sector": "Communication Services",
+        "industry": "Internet Content and Digital Advertising",
+    },
+    "META": {
+        "company_name": "Meta Platforms, Inc.",
+        "exchange": "NASDAQ",
+        "sector": "Communication Services",
+        "industry": "Social Platforms and Digital Advertising",
+    },
+    "MSFT": {
+        "company_name": "Microsoft Corporation",
+        "exchange": "NASDAQ",
+        "sector": "Information Technology",
+        "industry": "Software and Cloud Platforms",
+    },
+    "NVDA": {
+        "company_name": "NVIDIA Corporation",
+        "exchange": "NASDAQ",
+        "sector": "Information Technology",
+        "industry": "Semiconductors and Accelerated Computing",
+    },
+    "TSLA": {
+        "company_name": "Tesla, Inc.",
+        "exchange": "NASDAQ",
+        "sector": "Consumer Discretionary",
+        "industry": "Electric Vehicles and Energy Systems",
+    },
 }
 
 _NAME_ALIASES: dict[str, str] = {
@@ -80,6 +120,8 @@ def company_resolver_node(state: Mapping[str, object]) -> dict[str, object | Non
             return {
                 "company_name": meta["company_name"],
                 "symbol": normalized_symbol,
+                "sector": meta.get("sector"),
+                "industry": meta.get("industry"),
                 "warning": state.get("warning"),
                 "error": None,
             }
@@ -101,6 +143,8 @@ def company_resolver_node(state: Mapping[str, object]) -> dict[str, object | Non
         return {
             "company_name": company_name or None,
             "symbol": symbol or None,
+            "sector": str(state.get("sector") or "").strip() or None,
+            "industry": str(state.get("industry") or "").strip() or None,
             "warning": warning or None,
             "error": None,
         }
@@ -108,6 +152,8 @@ def company_resolver_node(state: Mapping[str, object]) -> dict[str, object | Non
         return {
             "company_name": state.get("company_name"),
             "symbol": state.get("symbol"),
+            "sector": state.get("sector"),
+            "industry": state.get("industry"),
             "warning": f"company_resolver fallback: {exc}",
             "error": None,
         }

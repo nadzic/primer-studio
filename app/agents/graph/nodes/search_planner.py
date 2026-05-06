@@ -44,7 +44,35 @@ def _entity_label(company_name: str, symbol: str, query: str) -> str:
     return query
 
 
-def _build_search_plan(entity: str, symbol: str) -> list[dict[str, str]]:
+def _sector_context_queries(subject: str, sector: str, industry: str) -> list[dict[str, str]]:
+    context_label = industry or sector
+    if not context_label:
+        return []
+    queries = [
+        {
+            "query": (
+                f"{context_label} latest trends demand pricing inventory "
+                f"near-term outlook {subject}"
+            ),
+            "purpose": "sector_context",
+        },
+        {
+            "query": (
+                f"{subject} competitive position market share "
+                f"{context_label} headwinds catalysts"
+            ),
+            "purpose": "sector_context",
+        },
+    ]
+    return _dedupe_plan_keep_order(queries)
+
+
+def _build_search_plan(
+    entity: str,
+    symbol: str,
+    sector: str,
+    industry: str,
+) -> list[dict[str, str]]:
     subject = entity.strip()
     ticker_or_subject = symbol or subject
     if not subject:
@@ -63,7 +91,15 @@ def _build_search_plan(entity: str, symbol: str) -> list[dict[str, str]]:
             "purpose": "official_regulatory_filing",
         },
         {
+            "query": f"{ticker_or_subject} latest 10-Q risk factors headwinds margin pressure",
+            "purpose": "official_regulatory_filing",
+        },
+        {
             "query": f"{subject} latest earnings call transcript prepared remarks Q&A",
+            "purpose": "management_commentary",
+        },
+        {
+            "query": f"{subject} outlook guidance next quarter demand headwinds risks",
             "purpose": "management_commentary",
         },
         {
@@ -75,6 +111,7 @@ def _build_search_plan(entity: str, symbol: str) -> list[dict[str, str]]:
             "purpose": "optional_market_sentiment",
         },
     ]
+    plan.extend(_sector_context_queries(subject=subject, sector=sector, industry=industry))
     return _dedupe_plan_keep_order(plan)
 
 
@@ -87,9 +124,16 @@ def search_planner_node(state: Mapping[str, object]) -> dict[str, object | None]
         query = str(state.get("query") or state.get("input_query") or "").strip()
         company_name = str(state.get("company_name") or "").strip()
         symbol = str(state.get("symbol") or "").strip().upper()
+        sector = str(state.get("sector") or "").strip()
+        industry = str(state.get("industry") or "").strip()
 
         entity = _entity_label(company_name=company_name, symbol=symbol, query=query)
-        search_plan = _build_search_plan(entity=entity, symbol=symbol)
+        search_plan = _build_search_plan(
+            entity=entity,
+            symbol=symbol,
+            sector=sector,
+            industry=industry,
+        )
 
         search_queries = [item["query"] for item in search_plan]
         if query:
@@ -97,7 +141,7 @@ def search_planner_node(state: Mapping[str, object]) -> dict[str, object | None]
         if company_name:
             search_queries.insert(1 if query else 0, company_name)
 
-        planned = _dedupe_keep_order(search_queries)[:8]
+        planned = _dedupe_keep_order(search_queries)[:10]
         capped_plan: list[dict[str, Any]] = []
         for item in search_plan:
             q = item.get("query")
