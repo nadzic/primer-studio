@@ -13,7 +13,7 @@ API_PREFIX = "/api/v1"
 def _allowed_origins() -> list[str]:
     raw = os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,https://veritake.ai",
+        "http://localhost:3000,http://127.0.0.1:3000",
     )
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
