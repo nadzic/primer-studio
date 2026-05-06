@@ -11,7 +11,12 @@ type ModelSelectorProps = {
   className?: string;
 };
 
-export function ModelSelector({ value, onChange, disabled = false, className }: ModelSelectorProps) {
+export function ModelSelector({
+  value,
+  onChange,
+  disabled = false,
+  className,
+}: ModelSelectorProps) {
   function handleChange(event: ChangeEvent<HTMLSelectElement>) {
     onChange(event.target.value);
   }
@@ -34,7 +39,12 @@ export function ModelSelector({ value, onChange, disabled = false, className }: 
           ))}
         </select>
         <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-zinc-500">
-          <svg aria-hidden viewBox="0 0 20 20" className="h-4 w-4 fill-none stroke-current" strokeWidth="2">
+          <svg
+            aria-hidden
+            viewBox="0 0 20 20"
+            className="h-4 w-4 fill-none stroke-current"
+            strokeWidth="2"
+          >
             <path d="M6 8l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
@@ -42,4 +52,3 @@ export function ModelSelector({ value, onChange, disabled = false, className }: 
     </label>
   );
 }
-

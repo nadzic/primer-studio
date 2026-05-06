@@ -78,7 +78,9 @@ export function LoadingIndicator() {
                 >
                   {isDone ? "✓" : index + 1}
                 </span>
-                <span className={isActive ? "text-sm text-zinc-900" : "text-sm text-zinc-500"}>{step}</span>
+                <span className={isActive ? "text-sm text-zinc-900" : "text-sm text-zinc-500"}>
+                  {step}
+                </span>
               </div>
             );
           })}

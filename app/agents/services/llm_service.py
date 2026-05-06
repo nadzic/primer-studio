@@ -1,5 +1,5 @@
-import os
 import contextvars
+import os
 from contextlib import contextmanager
 from typing import Any
 
@@ -144,7 +144,7 @@ def get_llm() -> BaseChatModel:
     request_model = _request_model_name.get()
     request_provider = _request_provider.get()
     model_name = (request_model or os.getenv("LLM_MODEL_NAME", "gpt-4o-mini")).strip()
-    provider = (request_provider or _normalized_provider()).strip().lower()  # openai | anthropic | ...
+    provider = (request_provider or _normalized_provider()).strip().lower()
     env_key = _required_api_key_env(provider)
     if env_key and not os.getenv(env_key):
         raise OSError(f"{env_key} is not set in environment/.env")

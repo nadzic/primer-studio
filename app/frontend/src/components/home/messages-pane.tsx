@@ -24,7 +24,10 @@ const SECTION_TITLES = new Set([
 ]);
 
 function isSectionTitleLine(line: string): boolean {
-  const normalized = line.trim().replace(/[:\s]+$/g, "").toLowerCase();
+  const normalized = line
+    .trim()
+    .replace(/[:\s]+$/g, "")
+    .toLowerCase();
   return SECTION_TITLES.has(normalized);
 }
 
@@ -173,7 +176,11 @@ function renderAssistantLine(line: string, index: number): ReactNode {
 
 function AssistantMessage({ content }: { content: string }) {
   const lines = content.split("\n");
-  return <div className="space-y-1.5">{lines.map((line, index) => renderAssistantLine(line, index))}</div>;
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, index) => renderAssistantLine(line, index))}
+    </div>
+  );
 }
 
 export function MessagesPane({ messages, isLoading }: MessagesPaneProps) {

@@ -33,4 +33,3 @@ export type ResearchRun = {
   errorMessage?: string;
   followup: FollowupMessage[];
 };
-

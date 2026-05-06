@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from langgraph.graph import END, START, StateGraph
@@ -56,7 +56,7 @@ def _build_graph_with_checkpointer():
     graph = StateGraph(NodesResearchState)
     for node_name, attribute_name in NODE_SEQUENCE:
         node_fn = getattr(workflow, attribute_name)
-        graph.add_node(node_name, workflow._adapt_node(node_fn))
+        graph.add_node(node_name, action=cast(Any, workflow._adapt_node(node_fn)))
 
     graph.add_edge(START, NODE_SEQUENCE[0][0])
     for (current, _), (nxt, _) in zip(NODE_SEQUENCE, NODE_SEQUENCE[1:], strict=False):
@@ -114,4 +114,7 @@ def test_langgraph_workflow_partial_execution_from_node_to_node(
     )
 
     assert result["error"] is None
-    assert result["warning"] == "resolve_company -> plan_search -> search_public_sources -> rank_sources"
+    assert (
+        result["warning"]
+        == "resolve_company -> plan_search -> search_public_sources -> rank_sources"
+    )

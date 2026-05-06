@@ -84,8 +84,14 @@ function LoadingDots() {
   return (
     <span className="ml-2 inline-flex items-center gap-1 align-middle" aria-hidden>
       <span className={`${dot} animate-pulse`} style={{ ...commonStyle, animationDelay: "0ms" }} />
-      <span className={`${dot} animate-pulse`} style={{ ...commonStyle, animationDelay: "150ms" }} />
-      <span className={`${dot} animate-pulse`} style={{ ...commonStyle, animationDelay: "300ms" }} />
+      <span
+        className={`${dot} animate-pulse`}
+        style={{ ...commonStyle, animationDelay: "150ms" }}
+      />
+      <span
+        className={`${dot} animate-pulse`}
+        style={{ ...commonStyle, animationDelay: "300ms" }}
+      />
     </span>
   );
 }
@@ -148,11 +154,14 @@ export function Launchpad({ runs, onOpenReport }: LaunchpadProps) {
                     : run.finishedAt
                       ? run.finishedAt - run.createdAt
                       : 0;
-                const estimatedTokens = Math.round(Math.max(1200, (resolvedElapsedMs / 1000) * 550));
+                const estimatedTokens = Math.round(
+                  Math.max(1200, (resolvedElapsedMs / 1000) * 550),
+                );
                 const activeStepIndex = isRunning
                   ? Math.min(Math.floor(resolvedElapsedMs / 4_500), Math.max(stepsCount - 1, 0))
                   : Math.max(stepsCount - 1, 0);
-                const completedSteps = run.status === "completed" ? stepsCount : activeStepIndex + 1;
+                const completedSteps =
+                  run.status === "completed" ? stepsCount : activeStepIndex + 1;
                 const usageTokens = run.status === "completed" ? extractUsageTokens(run) : null;
                 return (
                   <article
@@ -240,7 +249,11 @@ export function Launchpad({ runs, onOpenReport }: LaunchpadProps) {
                                 >
                                   {isDone ? "✓" : index + 1}
                                 </span>
-                                <span className={isActive ? "text-sm text-zinc-900" : "text-sm text-zinc-500"}>
+                                <span
+                                  className={
+                                    isActive ? "text-sm text-zinc-900" : "text-sm text-zinc-500"
+                                  }
+                                >
                                   {step}
                                   {isActive && <LoadingDots />}
                                 </span>
@@ -277,4 +290,3 @@ export function Launchpad({ runs, onOpenReport }: LaunchpadProps) {
     </section>
   );
 }
-

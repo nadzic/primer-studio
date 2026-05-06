@@ -79,7 +79,9 @@ export function ReportTab({
         ticker: response?.ticker ?? null,
         brief: response?.brief,
         selected_evidence: response?.selected_evidence ?? [],
-        chat_history: followupMessages.slice(-12).map((m) => ({ role: m.role, content: m.content })),
+        chat_history: followupMessages
+          .slice(-12)
+          .map((m) => ({ role: m.role, content: m.content })),
         model: selectedModel?.model ?? null,
         provider: selectedModel?.provider ?? null,
       };
@@ -125,7 +127,11 @@ export function ReportTab({
               />
             </div>
             <div className="hidden sm:block">
-              <ModelSelector value={modelOptionId} onChange={onModelOptionChange} disabled={isSending} />
+              <ModelSelector
+                value={modelOptionId}
+                onChange={onModelOptionChange}
+                disabled={isSending}
+              />
             </div>
             <button
               type="submit"
@@ -146,10 +152,14 @@ export function ReportTab({
           </div>
         </div>
         <div className="mt-2 sm:hidden">
-          <ModelSelector value={modelOptionId} onChange={onModelOptionChange} disabled={isSending} className="block" />
+          <ModelSelector
+            value={modelOptionId}
+            onChange={onModelOptionChange}
+            disabled={isSending}
+            className="block"
+          />
         </div>
       </form>
     </section>
   );
 }
-

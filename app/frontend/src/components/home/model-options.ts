@@ -44,4 +44,3 @@ export const MODEL_OPTIONS: ModelOption[] = [
 export function getModelOption(id: string): ModelOption | null {
   return MODEL_OPTIONS.find((opt) => opt.id === id) ?? null;
 }
-

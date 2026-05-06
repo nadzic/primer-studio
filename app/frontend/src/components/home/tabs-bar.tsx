@@ -91,4 +91,3 @@ export function TabsBar({ tabs, activeTabId, onSelect, onClose, onCreateNew }: T
     </div>
   );
 }
-

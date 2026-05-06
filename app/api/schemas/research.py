@@ -9,7 +9,10 @@ class ResearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="User research query (e.g. NVDA)")
     model: str | None = Field(
         default=None,
-        description="Optional LLM model override for this request (e.g. gpt-4o-mini, gpt-5.5, claude-4.6-sonnet).",
+        description=(
+            "Optional LLM model override for this request "
+            "(e.g. gpt-4o-mini, gpt-5.5, claude-4.6-sonnet)."
+        ),
     )
     provider: Literal["openai", "anthropic"] | None = Field(
         default=None, description="Optional LLM provider override for this request."
@@ -64,7 +67,11 @@ class ResearchResponse(BaseModel):
 
 
 class ResearchFollowupRequest(BaseModel):
-    question: str = Field(..., min_length=1, description="User follow-up question about the report.")
+    question: str = Field(
+        ...,
+        min_length=1,
+        description="User follow-up question about the report.",
+    )
     company: str | None = None
     ticker: str | None = None
     brief: Brief = Field(..., description="Structured brief from the research run.")
@@ -75,7 +82,10 @@ class ResearchFollowupRequest(BaseModel):
         default_factory=list,
         description="Optional prior chat turns, each: {role: user|assistant, content: string}.",
     )
-    model: str | None = Field(default=None, description="Optional LLM model override for this follow-up.")
+    model: str | None = Field(
+        default=None,
+        description="Optional LLM model override for this follow-up.",
+    )
     provider: Literal["openai", "anthropic"] | None = Field(
         default=None, description="Optional LLM provider override for this follow-up."
     )

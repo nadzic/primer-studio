@@ -382,7 +382,10 @@ def main() -> int:
 
     if args.out is not None:
         args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(report_payload, indent=2, ensure_ascii=True), encoding="utf-8")
+        args.out.write_text(
+            json.dumps(report_payload, indent=2, ensure_ascii=True),
+            encoding="utf-8",
+        )
         print(f"\nReport written: {args.out}")
 
     return 0 if passed_count == total_count else 1

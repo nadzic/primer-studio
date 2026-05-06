@@ -8,7 +8,12 @@ from starlette.concurrency import run_in_threadpool
 
 from app.agents.graph.state_models.nodes_research_state import NodesResearchState
 from app.agents.graph.workflow import build_graph
-from app.agents.services.llm_service import get_llm_usage, llm_request_overrides, llm_usage_tracker
+from app.agents.services.llm_service import (
+    get_llm_usage,
+    llm_request_overrides,
+    llm_usage_tracker,
+)
+from app.agents.services.prompt_llm_service import invoke_prompt_json
 from app.api.schemas.research import (
     Brief,
     BriefPoint,
@@ -19,7 +24,6 @@ from app.api.schemas.research import (
     ResearchResponse,
     TokenUsage,
 )
-from app.agents.services.prompt_llm_service import invoke_prompt_json
 
 router = APIRouter()
 RESEARCH_TIMEOUT_SECONDS = 180
@@ -163,11 +167,21 @@ async def research(payload: ResearchRequest) -> ResearchResponse:
     summary = cast(str | None, result.get("research_summary"))
     research_brief = result.get("research_brief")
     brief_data = research_brief if isinstance(research_brief, dict) else {}
+    workflow_trace = (
+        cast(list[str], brief_data.get("workflow_trace"))
+        if isinstance(brief_data.get("workflow_trace"), list)
+        else []
+    )
+    evidence_strength_rubric = (
+        cast(list[str], brief_data.get("evidence_strength_rubric"))
+        if isinstance(brief_data.get("evidence_strength_rubric"), list)
+        else []
+    )
 
     brief = Brief(
         executive_summary=cast(str | None, brief_data.get("executive_summary")) or summary,
-        workflow_trace=cast(list[str], brief_data.get("workflow_trace")) if isinstance(brief_data.get("workflow_trace"), list) else [],
-        evidence_strength_rubric=cast(list[str], brief_data.get("evidence_strength_rubric")) if isinstance(brief_data.get("evidence_strength_rubric"), list) else [],
+        workflow_trace=workflow_trace,
+        evidence_strength_rubric=evidence_strength_rubric,
         what_changed=_as_brief_points(brief_data.get("what_changed")),
         what_matters_most_now=_as_brief_points(brief_data.get("what_matters_most_now")),
         bull_points=_as_brief_points(brief_data.get("bull_points")),

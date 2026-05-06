@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -95,18 +97,25 @@ def invoke_prompt_json(
         try:
             response = future.result(timeout=timeout_s)
         except FuturesTimeoutError as exc:
-            raise TimeoutError(f"LLM step timed out after {timeout_s}s ({prompt_filename}).") from exc
+            raise TimeoutError(
+                f"LLM step timed out after {timeout_s}s ({prompt_filename})."
+            ) from exc
     # Best-effort token accounting (works when provider returns usage metadata).
     usage = None
     try:
-        if hasattr(response, "usage_metadata") and isinstance(getattr(response, "usage_metadata"), dict):
-            usage = getattr(response, "usage_metadata")
-        elif hasattr(response, "response_metadata") and isinstance(getattr(response, "response_metadata"), dict):
-            meta = getattr(response, "response_metadata")
+        usage_metadata = response.usage_metadata
+        response_metadata = response.response_metadata
+        if isinstance(usage_metadata, dict):
+            usage = usage_metadata
+        elif isinstance(response_metadata, dict):
+            meta = response_metadata
             usage = meta.get("token_usage") or meta.get("usage") or meta.get("usage_metadata")
     except Exception:
         usage = None
-    add_llm_usage(usage if isinstance(usage, dict) else None)
+    usage_payload: dict[str, Any] | None = None
+    if isinstance(usage, Mapping):
+        usage_payload = {str(k): v for k, v in usage.items()}
+    add_llm_usage(usage_payload)
 
     text = _message_content_to_text(getattr(response, "content", response))
     return _extract_json_payload(text)

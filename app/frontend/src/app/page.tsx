@@ -151,8 +151,7 @@ async function assertBackendReachable(): Promise<void> {
       throw new Error(`Health check returned ${response.status}`);
     }
   } catch (error) {
-    const reason =
-      error instanceof Error && error.message ? error.message : "unreachable backend";
+    const reason = error instanceof Error && error.message ? error.message : "unreachable backend";
     throw new Error(
       `Backend is not reachable at ${API_BASE_URL} (${reason}). Start the API server and retry.`,
     );
@@ -189,7 +188,8 @@ export default function HomePage() {
 
   const hasWorkspace = runs.length > 0 || tabs.length > 1;
   const placeholder = useMemo(
-    () => (hasWorkspace ? "Research another company..." : "Type: Research AAPL latest reporting changes"),
+    () =>
+      hasWorkspace ? "Research another company..." : "Type: Research AAPL latest reporting changes",
     [hasWorkspace],
   );
   const visibleSuggestions = useMemo(() => getVisibleSuggestions(input), [input]);

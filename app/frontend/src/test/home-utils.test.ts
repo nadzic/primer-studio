@@ -115,6 +115,8 @@ describe("home utils", () => {
     } satisfies ResearchResponse);
 
     expect(reply).toContain("### Bear points");
-    expect(reply).toContain("No clear downside risks surfaced from the selected evidence in this run.");
+    expect(reply).toContain(
+      "No clear downside risks surfaced from the selected evidence in this run.",
+    );
   });
 });

@@ -289,11 +289,19 @@ def _score_adjustments(
     if newest_year is not None:
         age_years = current_year - newest_year
         if age_years >= 3:
-            stale_penalty = 0.18 if source_type in {"reputable_financial_news", "analyst_or_commentary"} else 0.10
+            stale_penalty = (
+                0.18
+                if source_type in {"reputable_financial_news", "analyst_or_commentary"}
+                else 0.10
+            )
             penalty += stale_penalty
             notes.append(f"stale_penalty={stale_penalty:.2f}")
         elif age_years == 2:
-            stale_penalty = 0.10 if source_type in {"reputable_financial_news", "analyst_or_commentary"} else 0.06
+            stale_penalty = (
+                0.10
+                if source_type in {"reputable_financial_news", "analyst_or_commentary"}
+                else 0.06
+            )
             penalty += stale_penalty
             notes.append(f"stale_penalty={stale_penalty:.2f}")
 
@@ -391,9 +399,16 @@ def _llm_rank_sources(
         used_indices.add(idx)
         base = dict(sources_for_llm[idx])
         source_type = str(item.get("source_type") or "").strip() or _normalized_source_type(base)
-        reliability_score = _clamp01(_to_float(item.get("reliability_score")) or _reliability_score(source_type, str(base.get("text") or "").lower()))
-        relevance_score = _clamp01(_to_float(item.get("relevance_score")) or _relevance_score(base, source_type))
-        recency_score = _clamp01(_to_float(item.get("recency_score")) or _recency_score(base, relevance_score))
+        reliability_score = _clamp01(
+            _to_float(item.get("reliability_score"))
+            or _reliability_score(source_type, str(base.get("text") or "").lower())
+        )
+        relevance_score = _clamp01(
+            _to_float(item.get("relevance_score")) or _relevance_score(base, source_type)
+        )
+        recency_score = _clamp01(
+            _to_float(item.get("recency_score")) or _recency_score(base, relevance_score)
+        )
         llm_final_source_score = _to_float(item.get("final_source_score"))
         base["source_type"] = source_type
         base["reliability_score"] = round(reliability_score, 4)
