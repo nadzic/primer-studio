@@ -6,7 +6,7 @@
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-agent%20orchestration-1C3C3C?logo=langchain&logoColor=white)
 
-An agentic equity-research workflow prototype for a retail investor (Primer take-home).
+An agentic equity-research workflow prototype for a retail investor.
 
 Given a public company name or ticker, the system produces a concise, structured brief answering:
 - what changed in the latest results / reporting
